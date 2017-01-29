@@ -1,63 +1,105 @@
 ﻿<Page
+    x:Name="ThisPage"
     x:Class="Win10Notifications.MainPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Win10Notifications"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    mc:Ignorable="d">
+    mc:Ignorable="d"
+    xmlns:controls="using:Win10Notifications.Controls">
 
     <Grid x:Name="LayoutRoot" HorizontalAlignment="Left" VerticalAlignment="Top" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
-        <Grid x:Name="Input" Grid.Row="0">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <Grid Grid.Column="0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
-            <StackPanel Margin="0,0,0,10">
-                <TextBlock x:Name="InputTextBlock1" TextWrapping="Wrap" Grid.Row="0" HorizontalAlignment="Left">
-                Once a client is connected to the Bluetooth Rfcomm server, write the
-                message you want to transmit to the client and click "Send".
-                </TextBlock>
-            </StackPanel>
-            <StackPanel Margin="0,0,0,10" Orientation="Horizontal" Grid.Row="1" Grid.ColumnSpan ="2">
-                <Button Name="ListenButton" Margin="20,0,20,0" Click="ListenButton_Click">Start Listening</Button>
-                <Button x:Name="DisconnectButton" Margin="20,0,20,0" IsEnabled="False" Click="DisconnectButton_Click" Content="Disconnect"/>
-                <Button x:Name="ClearNotificationsButton" Content="Clear Notifications" Margin="20,0,20,0" Click="ClearNotificationsButton_Click"/>
-            </StackPanel>
-            <ScrollViewer Grid.Row="2" VerticalScrollMode="Auto" VerticalScrollBarVisibility="Auto">
-                <Grid Margin="0,10,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-                    <TextBlock Grid.ColumnSpan="2" Style="{StaticResource BaseTextBlockStyle}" TextWrapping="Wrap">Enter a message to send:</TextBlock>
-                    <TextBox x:Name="MessageTextBox" Grid.Column="0" Grid.Row="1" Margin="0,10,10,0" KeyDown="KeyboardKey_Pressed"/>
-                    <Button x:Name="SendButton" Grid.Column="1" Grid.Row="1" Content="Send" Margin="0,10,10,0" Click="SendButton_Click"/>
-                    <ListBox x:Name="ConversationListBox" Grid.Row="2" Grid.ColumnSpan="2" HorizontalAlignment="Stretch" VerticalAlignment="Top" Height="300" Margin="0,10,0,0" ScrollViewer.HorizontalScrollMode="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto"/>
-                </Grid>
-            </ScrollViewer>
+            <Grid Margin="20,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock
+                    Text="NOTIFICATIONS"
+                    Style="{ThemeResource SubtitleTextBlockStyle}"/>
+            </Grid>
+            <TextBlock
+                Text="{Binding ViewModel.Error}"
+                Style="{ThemeResource BodyTextBlockStyle}"
+                Visibility="{Binding ViewModel.Error, Converter={StaticResource StringToVisibilityConverter}, ElementName=ThisPage}"
+                Grid.Row="1"/>
+            <ListView
+                x:Name="ListViewNotifications"
+                Grid.Row="2"
+                ItemsSource="{Binding ViewModel.Notifications, ElementName=ThisPage}"
+                IsItemClickEnabled="True"
+                ItemClick="ListViewNotifications_ItemClick">
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <controls:MyToastNotificationControl
+                        UserNotification="{Binding}"/>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
         </Grid>
-        <RelativePanel>
-            <Frame x:Name="ScenarioFrame" Margin="0,5,0,0" RelativePanel.AlignTopWithPanel="True" RelativePanel.Above="StatusPanel" RelativePanel.AlignRightWithPanel="True" RelativePanel.AlignLeftWithPanel="True"/>
-            <StackPanel x:Name="StatusPanel" Orientation="Vertical" RelativePanel.AlignBottomWithPanel="True" RelativePanel.AlignRightWithPanel="True" RelativePanel.AlignLeftWithPanel="True">
-                <TextBlock x:Name="StatusLabel" Margin="10,0,0,10" TextWrapping="Wrap" Text="Status:" />
-                <Border x:Name="StatusBorder" Margin="0,0,0,0">
-                    <ScrollViewer VerticalScrollMode="Auto"  VerticalScrollBarVisibility="Auto" MaxHeight="200">
-                        <TextBlock x:Name="StatusBlock" FontWeight="Bold" 
+        <Grid Grid.Column="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <Grid x:Name="Input">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <StackPanel Margin="0,0,0,10">
+                    <TextBlock x:Name="InputTextBlock1" TextWrapping="Wrap" Grid.Row="0" HorizontalAlignment="Left">
+                        Once a client is connected to the Bluetooth Rfcomm server, write the
+                        message you want to transmit to the client and click "Send".
+                    </TextBlock>
+                </StackPanel>
+                <StackPanel Margin="0,0,0,10" Orientation="Horizontal" Grid.Row="1" Grid.ColumnSpan ="2">
+                    <Button Name="ListenButton" Margin="20,0,20,0" Click="ListenButton_Click">Start Listening</Button>
+                    <Button x:Name="DisconnectButton" Margin="20,0,20,0" IsEnabled="False" Click="DisconnectButton_Click" Content="Disconnect"/>
+                    <Button x:Name="ClearNotificationsButton" Content="Clear Notifications" Margin="20,0,20,0" Click="ClearNotificationsButton_Click"/>
+                </StackPanel>
+                <ScrollViewer Grid.Row="2" VerticalScrollMode="Auto" VerticalScrollBarVisibility="Auto">
+                    <Grid Margin="0,10,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.ColumnSpan="2" Style="{StaticResource BaseTextBlockStyle}" TextWrapping="Wrap">Enter a message to send:</TextBlock>
+                        <TextBox x:Name="MessageTextBox" Grid.Column="0" Grid.Row="1" Margin="0,10,10,0" KeyDown="KeyboardKey_Pressed"/>
+                        <Button x:Name="SendButton" Grid.Column="1" Grid.Row="1" Content="Send" Margin="0,10,10,0" Click="SendButton_Click"/>
+                        <ListBox x:Name="ConversationListBox" Grid.Row="2" Grid.ColumnSpan="2" Grid.Column="0"
+                                 HorizontalAlignment="Stretch" VerticalAlignment="Top" Height="300" Margin="0,10,0,0" ScrollViewer.HorizontalScrollMode="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto"/>
+                    </Grid>
+                </ScrollViewer>
+            </Grid>
+            <RelativePanel Grid.Row="1">
+                <Frame x:Name="ScenarioFrame" Margin="0,5,0,0" RelativePanel.AlignTopWithPanel="True" RelativePanel.Above="StatusPanel" RelativePanel.AlignRightWithPanel="True" RelativePanel.AlignLeftWithPanel="True"/>
+                <StackPanel x:Name="StatusPanel" Orientation="Vertical" RelativePanel.AlignBottomWithPanel="True" RelativePanel.AlignRightWithPanel="True" RelativePanel.AlignLeftWithPanel="True">
+                    <TextBlock x:Name="StatusLabel" Margin="10,0,0,10" TextWrapping="Wrap" Text="Status:" />
+                    <Border x:Name="StatusBorder" Margin="0,0,0,0">
+                        <ScrollViewer VerticalScrollMode="Auto"  VerticalScrollBarVisibility="Auto" MaxHeight="200">
+                            <TextBlock x:Name="StatusBlock" FontWeight="Bold" 
                                    MaxWidth="{Binding ElementName=Splitter, Path=ActualWidth}" Margin="10,10,10,20" TextWrapping="Wrap"  />
-                    </ScrollViewer>
-                </Border>
-            </StackPanel>
-        </RelativePanel>
+                        </ScrollViewer>
+                    </Border>
+                </StackPanel>
+            </RelativePanel>
+        </Grid>
     </Grid>
 </Page>

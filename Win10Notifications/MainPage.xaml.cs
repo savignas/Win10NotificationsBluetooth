@@ -45,6 +45,13 @@ namespace Win10Notifications
             this.Initialize();
         }
 
+        private void ListViewNotifications_ItemClick(object sender, ItemClickEventArgs e)
+        {
+            UserNotification clickedNotif = (UserNotification)e.ClickedItem;
+
+            RemoveNotification(clickedNotif.Id);
+        }
+
         private void ListenButton_Click(object sender, RoutedEventArgs e)
         {
             InitializeRfcommServer();
@@ -169,6 +176,31 @@ namespace Win10Notifications
                     SendMessage();
                 }
             }
+        }
+
+        public void RemoveNotification(uint notifId)
+        {
+            try
+            {
+                listener.RemoveNotification(notifId);
+            }
+
+            catch (Exception ex)
+            {
+                ShowMessage(ex.ToString(), "Failed to dismiss notification");
+            }
+
+            UpdateNotifications();
+        }
+
+        private async void ShowMessage(string content, string title)
+        {
+            try
+            {
+                await new MessageDialog(content, title).ShowAsync();
+            }
+
+            catch { }
         }
 
         /// <summary>
