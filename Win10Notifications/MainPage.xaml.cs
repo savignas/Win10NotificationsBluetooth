@@ -1,15 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices.WindowsRuntime;
-using System.Threading;
 using Windows.ApplicationModel.Background;
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.Rfcomm;
-using Windows.Foundation;
-using Windows.Foundation.Collections;
 using Windows.Networking.Sockets;
 using Windows.Storage.Streams;
 using Windows.UI.Notifications;
@@ -17,13 +12,7 @@ using Windows.UI.Notifications.Management;
 using Windows.UI.Popups;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Controls.Primitives;
-using Windows.UI.Xaml.Data;
-using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
-using Windows.UI.Xaml.Media.Imaging;
-using Windows.UI.Xaml.Navigation;
-using Win10Notifications.Helpers;
 
 // The Blank Page item template is documented at http://go.microsoft.com/fwlink/?LinkId=402352&clcid=0x409
 
@@ -36,13 +25,7 @@ namespace Win10Notifications
     {
         private UserNotificationListener _listener;
 
-        private string _error;
-
-        public string Error
-        {
-            get { return _error; }
-            //set { SetProperty(ref _error, value); }
-        }
+        public string Error { get; set; }
 
         public ObservableCollection<UserNotification> Notifications { get; private set; } = new ObservableCollection<UserNotification>();
 
@@ -126,7 +109,7 @@ namespace Win10Notifications
             {
                 case BackgroundAccessStatus.DeniedByUser:
                     var dialog = new MessageDialog("You need to turn on access to background apps in privacy settings!", "Error");
-                    var res = await dialog.ShowAsync();
+                    await dialog.ShowAsync();
                     break;
             }
 
@@ -162,14 +145,14 @@ namespace Win10Notifications
                 notifsInPlatform = notifsInPlatform.Reverse().ToList();
 
                 // First remove any notifications that no longer exist
-                for (int i = 0; i < this.Notifications.Count; i++)
+                for (int i = 0; i < Notifications.Count; i++)
                 {
-                    UserNotification existingNotif = this.Notifications[i];
+                    UserNotification existingNotif = Notifications[i];
 
                     // If not in platform anymore, remove from our list
                     if (!notifsInPlatform.Any(n => n.Id == existingNotif.Id))
                     {
-                        this.Notifications.RemoveAt(i);
+                        Notifications.RemoveAt(i);
                         i--;
                     }
                 }
@@ -190,7 +173,7 @@ namespace Win10Notifications
                         if (i != indexOfExisting)
                         {
                             // Move it to the right position
-                            this.Notifications.Move(indexOfExisting, i);
+                            Notifications.Move(indexOfExisting, i);
                         }
 
                         // Otherwise, leave it in its place
@@ -200,7 +183,7 @@ namespace Win10Notifications
                     else
                     {
                         // Insert at that position
-                        this.Notifications.Insert(i, platNotif);
+                        Notifications.Insert(i, platNotif);
 
                         // Get the toast binding, if present
                         var toastBinding = platNotif.Notification.Visual.GetBinding(KnownNotificationBindings.ToastGeneric);
@@ -214,58 +197,23 @@ namespace Win10Notifications
                             // joining them together via newlines.
                             var bodyText = string.Join("\n", textElements.Skip(1).Select(t => t.Text));
 
-                            MessageTextBox.Text = bodyText;
-
-                            SendMessage();
+                            SendMessage(bodyText);
                         }
                     }
                 }
             }
             catch (Exception ex)
             {
-                //Error = "Error updating notifications: " + ex.ToString();
+                Error = "Error updating notifications: " + ex;
             }
 
-            /*if (notifs.Count != 0)
-            {
-                // Select the first notification
-                var notif = notifs[0];
-
-                // Get the app's display name
-                var appDisplayName = notif.AppInfo.DisplayInfo.DisplayName;
-
-                // Get the app's logo
-                var appLogo = new BitmapImage();
-                var appLogoStream = notif.AppInfo.DisplayInfo.GetLogo(new Size(16, 16));
-                await appLogo.SetSourceAsync(await appLogoStream.OpenReadAsync());
-
-                // Get the toast binding, if present
-                var toastBinding = notif.Notification.Visual.GetBinding(KnownNotificationBindings.ToastGeneric);
-
-                if (toastBinding != null)
-                {
-                    // And then get the text elements from the toast binding
-                    var textElements = toastBinding.GetTextElements();
-
-                    // Treat the first text element as the title text
-                    var titleText = textElements.FirstOrDefault()?.Text;
-
-                    // We'll treat all subsequent text elements as body text,
-                    // joining them together via newlines.
-                    var bodyText = string.Join("\n", textElements.Skip(1).Select(t => t.Text));
-
-                    MessageTextBox.Text = bodyText;
-
-                    SendMessage();
-                }
-            }*/
         }
 
         private int FindIndexOfNotification(uint notifId)
         {
-            for (int i = 0; i < this.Notifications.Count; i++)
+            for (int i = 0; i < Notifications.Count; i++)
             {
-                if (this.Notifications[i].Id == notifId)
+                if (Notifications[i].Id == notifId)
                     return i;
             }
 
@@ -404,48 +352,32 @@ namespace Win10Notifications
             sdpWriter.WriteByte((byte)Constants.SdpServiceName.Length);
 
             // The UTF-8 encoded Service Name value.
-            sdpWriter.UnicodeEncoding = Windows.Storage.Streams.UnicodeEncoding.Utf8;
+            sdpWriter.UnicodeEncoding = UnicodeEncoding.Utf8;
             sdpWriter.WriteString(Constants.SdpServiceName);
 
             // Set the SDP Attribute on the RFCOMM Service Provider.
             rfcommProvider.SdpRawAttributes.Add(Constants.SdpServiceNameAttributeId, sdpWriter.DetachBuffer());
         }
 
-        private void SendButton_Click(object sender, RoutedEventArgs e)
-        {
-            SendMessage();
-        }
-
-        public void KeyboardKey_Pressed(object sender, KeyRoutedEventArgs e)
-        {
-            if (e.Key == Windows.System.VirtualKey.Enter)
-            {
-                SendMessage();
-            }
-        }
-
-        private async void SendMessage()
+        private async void SendMessage(string notifMessage)
         {
             // There's no need to send a zero length message
-            if (MessageTextBox.Text.Length != 0)
+            if (notifMessage.Length != 0)
             {
                 // Make sure that the connection is still up and there is a message to send
                 if (_socket != null)
                 {
-                    var message = MessageTextBox.Text;
+                    var message = notifMessage;
                     _writer.WriteUInt32((uint)message.Length);
                     _writer.WriteString(message);
 
                     ConversationListBox.Items.Add("Sent: " + message);
-                    // Clear the messageTextBox for a new message
-                    MessageTextBox.Text = "";
 
                     await _writer.StoreAsync();
-
                 }
                 else
                 {
-                    NotifyUser("No clients connected, please wait for a client to connect before attempting to send a message", NotifyType.StatusMessage);
+                    NotifyUser("No clients connected, please wait for a client to connect before attempting to send a notification", NotifyType.StatusMessage);
                 }
             }
         }
