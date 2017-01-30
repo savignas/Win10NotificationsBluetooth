@@ -97,6 +97,8 @@
     </Compile>
     <Compile Include="Controls\MyToastNotificationControl.xaml.cs" />
     <Compile Include="Converters\StringToVisibilityConverter.cs" />
+    <Compile Include="Helpers\BackgroundTaskHelper.cs" />
+    <Compile Include="Helpers\BindableBase.cs" />
     <Compile Include="MainPage.xaml.cs">
       <DependentUpon>MainPage.xaml</DependentUpon>
     </Compile>

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
@@ -22,6 +23,7 @@ using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Media.Imaging;
 using Windows.UI.Xaml.Navigation;
+using Win10Notifications.Helpers;
 
 // The Blank Page item template is documented at http://go.microsoft.com/fwlink/?LinkId=402352&clcid=0x409
 
@@ -32,12 +34,22 @@ namespace Win10Notifications
     /// </summary>
     public sealed partial class MainPage : Page
     {
-        private UserNotificationListener listener;
+        private UserNotificationListener _listener;
 
-        private StreamSocket socket;
-        private DataWriter writer;
-        private RfcommServiceProvider rfcommProvider;
-        private StreamSocketListener socketListener;
+        private string _error;
+
+        public string Error
+        {
+            get { return _error; }
+            //set { SetProperty(ref _error, value); }
+        }
+
+        public ObservableCollection<UserNotification> Notifications { get; private set; } = new ObservableCollection<UserNotification>();
+
+        private StreamSocket _socket;
+        private DataWriter _writer;
+        private RfcommServiceProvider _rfcommProvider;
+        private StreamSocketListener _socketListener;
 
         public MainPage()
         {
@@ -47,7 +59,7 @@ namespace Win10Notifications
 
         private void ListViewNotifications_ItemClick(object sender, ItemClickEventArgs e)
         {
-            UserNotification clickedNotif = (UserNotification)e.ClickedItem;
+            var clickedNotif = (UserNotification)e.ClickedItem;
 
             RemoveNotification(clickedNotif.Id);
         }
@@ -60,16 +72,17 @@ namespace Win10Notifications
         private void ClearNotificationsButton_Click(object sender, RoutedEventArgs e)
         {
             // Clear all notifications. Use with caution.
-            listener.ClearNotifications();
+            _listener.ClearNotifications();
+            UpdateNotifications();
         }
 
         private async void Initialize()
         {
             // Get the listener
-            listener = UserNotificationListener.Current;
+            _listener = UserNotificationListener.Current;
 
             // And request access to the user's notifications (must be called from UI thread)
-            UserNotificationListenerAccessStatus accessStatus = await listener.RequestAccessAsync();
+            var accessStatus = await _listener.RequestAccessAsync();
 
             switch (accessStatus)
             {
@@ -107,7 +120,7 @@ namespace Win10Notifications
 
             // TODO: Request/check Listener access via UserNotificationListener.Current.RequestAccessAsync
 
-            BackgroundAccessStatus backgroundStatus = await BackgroundExecutionManager.RequestAccessAsync();
+            var backgroundStatus = await BackgroundExecutionManager.RequestAccessAsync();
 
             switch (backgroundStatus)
             {
@@ -140,49 +153,130 @@ namespace Win10Notifications
 
         public async void UpdateNotifications()
         {
-            // Get the toast notifications
-            IReadOnlyList<UserNotification> notifs = await listener.GetNotificationsAsync(NotificationKinds.Toast);
+            try
+            {
+                // Get the toast notifications
+                IReadOnlyList<UserNotification> notifsInPlatform = await _listener.GetNotificationsAsync(NotificationKinds.Toast);
 
-            if (notifs.Count != 0)
+                // Reverse their order since the platform returns them with oldest first, we want newest first
+                notifsInPlatform = notifsInPlatform.Reverse().ToList();
+
+                // First remove any notifications that no longer exist
+                for (int i = 0; i < this.Notifications.Count; i++)
+                {
+                    UserNotification existingNotif = this.Notifications[i];
+
+                    // If not in platform anymore, remove from our list
+                    if (!notifsInPlatform.Any(n => n.Id == existingNotif.Id))
+                    {
+                        this.Notifications.RemoveAt(i);
+                        i--;
+                    }
+                }
+
+                // Now our list only contains notifications that exist,
+                // but it might be missing new notifications.
+
+                for (int i = 0; i < notifsInPlatform.Count; i++)
+                {
+                    UserNotification platNotif = notifsInPlatform[i];
+
+                    int indexOfExisting = FindIndexOfNotification(platNotif.Id);
+
+                    // If we have an existing
+                    if (indexOfExisting != -1)
+                    {
+                        // And if it's in the wrong position
+                        if (i != indexOfExisting)
+                        {
+                            // Move it to the right position
+                            this.Notifications.Move(indexOfExisting, i);
+                        }
+
+                        // Otherwise, leave it in its place
+                    }
+
+                    // Otherwise, notification is new
+                    else
+                    {
+                        // Insert at that position
+                        this.Notifications.Insert(i, platNotif);
+
+                        // Get the toast binding, if present
+                        var toastBinding = platNotif.Notification.Visual.GetBinding(KnownNotificationBindings.ToastGeneric);
+
+                        if (toastBinding != null)
+                        {
+                            // And then get the text elements from the toast binding
+                            var textElements = toastBinding.GetTextElements();
+
+                            // We'll treat all subsequent text elements as body text,
+                            // joining them together via newlines.
+                            var bodyText = string.Join("\n", textElements.Skip(1).Select(t => t.Text));
+
+                            MessageTextBox.Text = bodyText;
+
+                            SendMessage();
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                //Error = "Error updating notifications: " + ex.ToString();
+            }
+
+            /*if (notifs.Count != 0)
             {
                 // Select the first notification
-                UserNotification notif = notifs[0];
+                var notif = notifs[0];
 
                 // Get the app's display name
-                string appDisplayName = notif.AppInfo.DisplayInfo.DisplayName;
+                var appDisplayName = notif.AppInfo.DisplayInfo.DisplayName;
 
                 // Get the app's logo
-                BitmapImage appLogo = new BitmapImage();
-                RandomAccessStreamReference appLogoStream = notif.AppInfo.DisplayInfo.GetLogo(new Size(16, 16));
+                var appLogo = new BitmapImage();
+                var appLogoStream = notif.AppInfo.DisplayInfo.GetLogo(new Size(16, 16));
                 await appLogo.SetSourceAsync(await appLogoStream.OpenReadAsync());
 
                 // Get the toast binding, if present
-                NotificationBinding toastBinding = notif.Notification.Visual.GetBinding(KnownNotificationBindings.ToastGeneric);
+                var toastBinding = notif.Notification.Visual.GetBinding(KnownNotificationBindings.ToastGeneric);
 
                 if (toastBinding != null)
                 {
                     // And then get the text elements from the toast binding
-                    IReadOnlyList<AdaptiveNotificationText> textElements = toastBinding.GetTextElements();
+                    var textElements = toastBinding.GetTextElements();
 
                     // Treat the first text element as the title text
-                    string titleText = textElements.FirstOrDefault()?.Text;
+                    var titleText = textElements.FirstOrDefault()?.Text;
 
                     // We'll treat all subsequent text elements as body text,
                     // joining them together via newlines.
-                    string bodyText = string.Join("\n", textElements.Skip(1).Select(t => t.Text));
+                    var bodyText = string.Join("\n", textElements.Skip(1).Select(t => t.Text));
 
                     MessageTextBox.Text = bodyText;
 
                     SendMessage();
                 }
+            }*/
+        }
+
+        private int FindIndexOfNotification(uint notifId)
+        {
+            for (int i = 0; i < this.Notifications.Count; i++)
+            {
+                if (this.Notifications[i].Id == notifId)
+                    return i;
             }
+
+            return -1;
         }
 
         public void RemoveNotification(uint notifId)
         {
             try
             {
-                listener.RemoveNotification(notifId);
+                _listener.RemoveNotification(notifId);
             }
 
             catch (Exception ex)
@@ -200,7 +294,10 @@ namespace Win10Notifications
                 await new MessageDialog(content, title).ShowAsync();
             }
 
-            catch { }
+            catch
+            {
+                // ignored
+            }
         }
 
         /// <summary>
@@ -214,7 +311,7 @@ namespace Win10Notifications
 
             try
             {
-                rfcommProvider = await RfcommServiceProvider.CreateAsync(RfcommServiceId.FromUuid(Constants.RfcommChatServiceUuid));
+                _rfcommProvider = await RfcommServiceProvider.CreateAsync(RfcommServiceId.FromUuid(Constants.RfcommChatServiceUuid));
             }
             // Catch exception HRESULT_FROM_WIN32(ERROR_DEVICE_NOT_AVAILABLE).
             catch (Exception ex) when ((uint)ex.HResult == 0x800710DF)
@@ -228,19 +325,19 @@ namespace Win10Notifications
 
 
             // Create a listener for this service and start listening
-            socketListener = new StreamSocketListener();
-            socketListener.ConnectionReceived += OnConnectionReceived;
-            var rfcomm = rfcommProvider.ServiceId.AsString();
+            _socketListener = new StreamSocketListener();
+            _socketListener.ConnectionReceived += OnConnectionReceived;
+            var rfcomm = _rfcommProvider.ServiceId.AsString();
 
-            await socketListener.BindServiceNameAsync(rfcommProvider.ServiceId.AsString(),
+            await _socketListener.BindServiceNameAsync(_rfcommProvider.ServiceId.AsString(),
                 SocketProtectionLevel.BluetoothEncryptionAllowNullAuthentication);
 
             // Set the SDP attributes and start Bluetooth advertising
-            InitializeServiceSdpAttributes(rfcommProvider);
+            InitializeServiceSdpAttributes(_rfcommProvider);
 
             try
             {
-                rfcommProvider.StartAdvertising(socketListener, true);
+                _rfcommProvider.StartAdvertising(_socketListener, true);
             }
             catch (Exception e)
             {
@@ -333,17 +430,17 @@ namespace Win10Notifications
             if (MessageTextBox.Text.Length != 0)
             {
                 // Make sure that the connection is still up and there is a message to send
-                if (socket != null)
+                if (_socket != null)
                 {
-                    string message = MessageTextBox.Text;
-                    writer.WriteUInt32((uint)message.Length);
-                    writer.WriteString(message);
+                    var message = MessageTextBox.Text;
+                    _writer.WriteUInt32((uint)message.Length);
+                    _writer.WriteString(message);
 
                     ConversationListBox.Items.Add("Sent: " + message);
                     // Clear the messageTextBox for a new message
                     MessageTextBox.Text = "";
 
-                    await writer.StoreAsync();
+                    await _writer.StoreAsync();
 
                 }
                 else
@@ -362,28 +459,28 @@ namespace Win10Notifications
 
         private async void Disconnect()
         {
-            if (rfcommProvider != null)
+            if (_rfcommProvider != null)
             {
-                rfcommProvider.StopAdvertising();
-                rfcommProvider = null;
+                _rfcommProvider.StopAdvertising();
+                _rfcommProvider = null;
             }
 
-            if (socketListener != null)
+            if (_socketListener != null)
             {
-                socketListener.Dispose();
-                socketListener = null;
+                _socketListener.Dispose();
+                _socketListener = null;
             }
 
-            if (writer != null)
+            if (_writer != null)
             {
-                writer.DetachStream();
-                writer = null;
+                _writer.DetachStream();
+                _writer = null;
             }
 
-            if (socket != null)
+            if (_socket != null)
             {
-                socket.Dispose();
-                socket = null;
+                _socket.Dispose();
+                _socket = null;
             }
             await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
             {
@@ -402,12 +499,12 @@ namespace Win10Notifications
             StreamSocketListener sender, StreamSocketListenerConnectionReceivedEventArgs args)
         {
             // Don't need the listener anymore
-            socketListener.Dispose();
-            socketListener = null;
+            _socketListener.Dispose();
+            _socketListener = null;
 
             try
             {
-                socket = args.Socket;
+                _socket = args.Socket;
             }
             catch (Exception e)
             {
@@ -420,11 +517,11 @@ namespace Win10Notifications
             }
 
             // Note - this is the supported way to get a Bluetooth device from a given socket
-            var remoteDevice = await BluetoothDevice.FromHostNameAsync(socket.Information.RemoteHostName);
+            var remoteDevice = await BluetoothDevice.FromHostNameAsync(_socket.Information.RemoteHostName);
 
-            writer = new DataWriter(socket.OutputStream);
-            var reader = new DataReader(socket.InputStream);
-            bool remoteDisconnection = false;
+            _writer = new DataWriter(_socket.OutputStream);
+            var reader = new DataReader(_socket.InputStream);
+            var remoteDisconnection = false;
 
             await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
             {
@@ -437,7 +534,7 @@ namespace Win10Notifications
                 try
                 {
                     // Based on the protocol we've defined, the first uint is the size of the message
-                    uint readLength = await reader.LoadAsync(sizeof(uint));
+                    var readLength = await reader.LoadAsync(sizeof(uint));
 
                     // Check if the size of the data is expected (otherwise the remote has already terminated the connection)
                     if (readLength < sizeof(uint))
@@ -445,7 +542,7 @@ namespace Win10Notifications
                         remoteDisconnection = true;
                         break;
                     }
-                    uint currentLength = reader.ReadUInt32();
+                    var currentLength = reader.ReadUInt32();
 
                     // Load the rest of the message since you already know the length of the data expected.  
                     readLength = await reader.LoadAsync(currentLength);
@@ -456,7 +553,7 @@ namespace Win10Notifications
                         remoteDisconnection = true;
                         break;
                     }
-                    string message = reader.ReadString(currentLength);
+                    var message = reader.ReadString(currentLength);
 
                     await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
                     {
