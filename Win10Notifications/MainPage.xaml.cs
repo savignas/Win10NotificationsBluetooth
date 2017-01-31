@@ -27,7 +27,7 @@ namespace Win10Notifications
 
         public string Error { get; set; }
 
-        public ObservableCollection<UserNotification> Notifications { get; private set; } = new ObservableCollection<UserNotification>();
+        public ObservableCollection<UserNotification> Notifications { get; } = new ObservableCollection<UserNotification>();
 
         private StreamSocket _socket;
         private DataWriter _writer;
@@ -54,8 +54,16 @@ namespace Win10Notifications
 
         private void ClearNotificationsButton_Click(object sender, RoutedEventArgs e)
         {
-            // Clear all notifications. Use with caution.
-            _listener.ClearNotifications();
+            try
+            {
+                // Clear all notifications. Use with caution.
+                _listener.ClearNotifications();
+            }
+            catch (Exception ex)
+            {
+                Error = "Failed to clear all norifications! Error: " + ex;
+            }
+
             UpdateNotifications();
         }
 
@@ -139,15 +147,15 @@ namespace Win10Notifications
             try
             {
                 // Get the toast notifications
-                IReadOnlyList<UserNotification> notifsInPlatform = await _listener.GetNotificationsAsync(NotificationKinds.Toast);
+                var notifsInPlatform = await _listener.GetNotificationsAsync(NotificationKinds.Toast);
 
                 // Reverse their order since the platform returns them with oldest first, we want newest first
                 notifsInPlatform = notifsInPlatform.Reverse().ToList();
 
                 // First remove any notifications that no longer exist
-                for (int i = 0; i < Notifications.Count; i++)
+                for (var i = 0; i < Notifications.Count; i++)
                 {
-                    UserNotification existingNotif = Notifications[i];
+                    var existingNotif = Notifications[i];
 
                     // If not in platform anymore, remove from our list
                     if (!notifsInPlatform.Any(n => n.Id == existingNotif.Id))
@@ -160,11 +168,11 @@ namespace Win10Notifications
                 // Now our list only contains notifications that exist,
                 // but it might be missing new notifications.
 
-                for (int i = 0; i < notifsInPlatform.Count; i++)
+                for (var i = 0; i < notifsInPlatform.Count; i++)
                 {
-                    UserNotification platNotif = notifsInPlatform[i];
+                    var platNotif = notifsInPlatform[i];
 
-                    int indexOfExisting = FindIndexOfNotification(platNotif.Id);
+                    var indexOfExisting = FindIndexOfNotification(platNotif.Id);
 
                     // If we have an existing
                     if (indexOfExisting != -1)
@@ -211,7 +219,7 @@ namespace Win10Notifications
 
         private int FindIndexOfNotification(uint notifId)
         {
-            for (int i = 0; i < Notifications.Count; i++)
+            for (var i = 0; i < Notifications.Count; i++)
             {
                 if (Notifications[i].Id == notifId)
                     return i;
@@ -235,7 +243,7 @@ namespace Win10Notifications
             UpdateNotifications();
         }
 
-        private async void ShowMessage(string content, string title)
+        private static async void ShowMessage(string content, string title)
         {
             try
             {
@@ -341,7 +349,7 @@ namespace Win10Notifications
         /// Creates the SDP record that will be revealed to the Client device when pairing occurs.  
         /// </summary>
         /// <param name="rfcommProvider">The RfcommServiceProvider that is being used to initialize the server</param>
-        private void InitializeServiceSdpAttributes(RfcommServiceProvider rfcommProvider)
+        private static void InitializeServiceSdpAttributes(RfcommServiceProvider rfcommProvider)
         {
             var sdpWriter = new DataWriter();
 

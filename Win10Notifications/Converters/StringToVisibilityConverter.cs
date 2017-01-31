@@ -12,7 +12,7 @@ namespace Win10Notifications.Converters
     {
         public object Convert(object value, Type targetType, object parameter, string language)
         {
-            if (value is string && !(string.IsNullOrWhiteSpace(value as string)))
+            if (!string.IsNullOrWhiteSpace(value as string))
                 return Visibility.Visible;
 
             return Visibility.Collapsed;
