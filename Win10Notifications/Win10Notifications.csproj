@@ -101,6 +101,7 @@
       <DependentUpon>MainPage.xaml</DependentUpon>
     </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="RadioModel.cs" />
     <Compile Include="RfcommConfiguration.cs" />
   </ItemGroup>
   <ItemGroup>

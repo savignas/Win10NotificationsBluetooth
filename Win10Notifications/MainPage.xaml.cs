@@ -5,6 +5,7 @@ using System.Linq;
 using Windows.ApplicationModel.Background;
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.Rfcomm;
+using Windows.Devices.Radios;
 using Windows.Networking.Sockets;
 using Windows.Storage.Streams;
 using Windows.UI.Notifications;
@@ -37,7 +38,9 @@ namespace Win10Notifications
         public MainPage()
         {
             this.InitializeComponent();
-            this.Initialize();
+            this.InitializeNotificationListener();
+            this.InitializeRadios();
+            this.InitializeRfcommServer();
         }
 
         private void ListViewNotifications_ItemClick(object sender, ItemClickEventArgs e)
@@ -67,7 +70,7 @@ namespace Win10Notifications
             UpdateNotifications();
         }
 
-        private async void Initialize()
+        private async void InitializeNotificationListener()
         {
             // Get the listener
             _listener = UserNotificationListener.Current;
@@ -162,6 +165,27 @@ namespace Win10Notifications
                     {
                         Notifications.RemoveAt(i);
                         i--;
+
+                        // Get the toast binding, if present
+                        var toastBinding = existingNotif.Notification.Visual.GetBinding(KnownNotificationBindings.ToastGeneric);
+
+                        var titleText = "No title";
+                        var bodyText = "";
+
+                        if (toastBinding != null)
+                        {
+                            // And then get the text elements from the toast binding
+                            var textElements = toastBinding.GetTextElements();
+
+                            // Treat the first text element as the title text
+                            titleText = textElements.FirstOrDefault()?.Text;
+
+                            // We'll treat all subsequent text elements as body text,
+                            // joining them together via newlines.
+                            bodyText = string.Join("\n", textElements.Skip(1).Select(t => t.Text));
+                        }
+
+                        SendMessage("Cleared: " + titleText + ": " + bodyText);
                     }
                 }
 
@@ -171,6 +195,25 @@ namespace Win10Notifications
                 for (var i = 0; i < notifsInPlatform.Count; i++)
                 {
                     var platNotif = notifsInPlatform[i];
+
+                    // Get the toast binding, if present
+                    var toastBinding = platNotif.Notification.Visual.GetBinding(KnownNotificationBindings.ToastGeneric);
+
+                    var titleText = "No title";
+                    var bodyText = "";
+
+                    if (toastBinding != null)
+                    {
+                        // And then get the text elements from the toast binding
+                        var textElements = toastBinding.GetTextElements();
+
+                        // Treat the first text element as the title text
+                        titleText = textElements.FirstOrDefault()?.Text;
+
+                        // We'll treat all subsequent text elements as body text,
+                        // joining them together via newlines.
+                        bodyText = string.Join("\n", textElements.Skip(1).Select(t => t.Text));
+                    }
 
                     var indexOfExisting = FindIndexOfNotification(platNotif.Id);
 
@@ -182,6 +225,8 @@ namespace Win10Notifications
                         {
                             // Move it to the right position
                             Notifications.Move(indexOfExisting, i);
+
+                            SendMessage("Reposition: " + titleText + ": " + bodyText);
                         }
 
                         // Otherwise, leave it in its place
@@ -193,20 +238,7 @@ namespace Win10Notifications
                         // Insert at that position
                         Notifications.Insert(i, platNotif);
 
-                        // Get the toast binding, if present
-                        var toastBinding = platNotif.Notification.Visual.GetBinding(KnownNotificationBindings.ToastGeneric);
-
-                        if (toastBinding != null)
-                        {
-                            // And then get the text elements from the toast binding
-                            var textElements = toastBinding.GetTextElements();
-
-                            // We'll treat all subsequent text elements as body text,
-                            // joining them together via newlines.
-                            var bodyText = string.Join("\n", textElements.Skip(1).Select(t => t.Text));
-
-                            SendMessage(bodyText);
-                        }
+                        SendMessage("New: " + titleText + ": " + bodyText);
                     }
                 }
             }
@@ -253,6 +285,34 @@ namespace Win10Notifications
             catch
             {
                 // ignored
+            }
+        }
+
+        private async void InitializeRadios()
+        {
+            // RequestAccessAsync must be called at least once from the UI thread
+            var accessLevel = await Radio.RequestAccessAsync();
+            switch (accessLevel)
+            {
+                case RadioAccessStatus.DeniedByUser:
+                    var dialog = new MessageDialog("You need to turn on access to radios in privacy settings!", "Error");
+                    await dialog.ShowAsync();
+                    break;
+            }
+
+            // An alternative to Radio.GetRadiosAsync is to use the Windows.Devices.Enumeration pattern,
+            // passing Radio.GetDeviceSelector as the AQS string
+            var radios = await Radio.GetRadiosAsync();
+            foreach (var radio in radios)
+            {
+                if (radio.Name == "Bluetooth")
+                {
+                    BluetoothSwitchList.Items.Add(new RadioModel(radio, this));
+                    if (radio.State == RadioState.Disabled || radio.State == RadioState.Off)
+                    {
+                        ListenButton.IsEnabled = false;
+                    }
+                }
             }
         }
 
@@ -466,6 +526,7 @@ namespace Win10Notifications
             await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
             {
                 NotifyUser("Connected to Client: " + remoteDevice.Name, NotifyType.StatusMessage);
+                DisconnectButton.Content = "Disconnect from " + remoteDevice.Name;
             });
 
             // Infinite read buffer loop
@@ -505,7 +566,8 @@ namespace Win10Notifications
                 {
                     await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
                     {
-                        NotifyUser("Client Disconnected Successfully", NotifyType.StatusMessage);
+                        NotifyUser("Client (" + remoteDevice.Name + ") Disconnected Successfully", NotifyType.StatusMessage);
+                        DisconnectButton.Content = "Disconnect";
                     });
                     break;
                 }
@@ -517,7 +579,8 @@ namespace Win10Notifications
                 Disconnect();
                 await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
                 {
-                    NotifyUser("Client disconnected", NotifyType.StatusMessage);
+                    NotifyUser("Client (" + remoteDevice.Name + ") disconnected", NotifyType.StatusMessage);
+                    DisconnectButton.Content = "Disconnect";
                 });
             }
         }

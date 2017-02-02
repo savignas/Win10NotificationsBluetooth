@@ -58,6 +58,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
                 <StackPanel Margin="0,0,0,10">
@@ -65,11 +66,25 @@
                         Once a client is connected to the Bluetooth Rfcomm server, make a toast notification to transmit to the client.
                     </TextBlock>
                 </StackPanel>
-                <StackPanel Margin="0,0,0,10" Orientation="Horizontal" Grid.Row="1" Grid.ColumnSpan ="2">
-                    <Button Name="ListenButton" Margin="20,0,20,0" Click="ListenButton_Click">Start Listening</Button>
+                <ItemsControl Grid.Row="1" x:Name="BluetoothSwitchList" HorizontalAlignment="Left" Margin="20,0,0,10">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition />
+                                    <ColumnDefinition />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"/>
+                                <ToggleSwitch Grid.Column="1" IsOn="{Binding IsRadioOn, Mode=TwoWay}" IsEnabled="{Binding IsEnabled}"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <StackPanel Margin="0,0,0,10" Orientation="Horizontal" Grid.Row="2" Grid.ColumnSpan="2">
+                    <Button Name="ListenButton" Margin="20,0,20,0" Click="ListenButton_Click">Start Bluetooth Server</Button>
                     <Button x:Name="DisconnectButton" Margin="20,0,20,0" IsEnabled="False" Click="DisconnectButton_Click" Content="Disconnect"/>
                 </StackPanel>
-                <ScrollViewer Grid.Row="2" VerticalScrollMode="Auto" VerticalScrollBarVisibility="Auto">
+                <ScrollViewer Grid.Row="3" VerticalScrollMode="Auto" VerticalScrollBarVisibility="Auto">
                     <Grid Margin="0,10,0,0">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*"/>
