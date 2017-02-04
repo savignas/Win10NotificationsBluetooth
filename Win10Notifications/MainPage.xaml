@@ -74,15 +74,17 @@
                                     <ColumnDefinition />
                                     <ColumnDefinition />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"/>
-                                <ToggleSwitch Grid.Column="1" IsOn="{Binding IsRadioOn, Mode=TwoWay}" IsEnabled="{Binding IsEnabled}"/>
+                                <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <ToggleSwitch Grid.Column="1" IsOn="{Binding IsRadioOn, Mode=TwoWay}" IsEnabled="{Binding IsEnabled}" VerticalAlignment="Center" IsEnabledChanged="Toggle_IsEnabledChanged"/>
                             </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
                 <StackPanel Margin="0,0,0,10" Orientation="Horizontal" Grid.Row="2" Grid.ColumnSpan="2">
-                    <Button Name="ListenButton" Margin="20,0,20,0" Click="ListenButton_Click">Start Bluetooth Server</Button>
-                    <Button x:Name="DisconnectButton" Margin="20,0,20,0" IsEnabled="False" Click="DisconnectButton_Click" Content="Disconnect"/>
+                    <Button Name="ListenButton" Margin="20,0,20,0" Click="ListenButton_Click">Start Bluetooth Foreground Server</Button>
+                    <Button x:Name="DisconnectButton" Margin="20,0,20,0" IsEnabled="False" Click="DisconnectButton_Click" Content="Disconnect Foreground Server"/>
+                    <Button Name="ListenButtonBg" Margin="20,0,20,0" Click="ListenButtonBg_Click">Start Bluetooth Background Server</Button>
+                    <Button x:Name="DisconnectButtonBg" Margin="20,0,20,0" IsEnabled="False" Click="DisconnectButtonBg_Click" Content="Disconnect Background Server"/>
                 </StackPanel>
                 <ScrollViewer Grid.Row="3" VerticalScrollMode="Auto" VerticalScrollBarVisibility="Auto">
                     <Grid Margin="0,10,0,0">
