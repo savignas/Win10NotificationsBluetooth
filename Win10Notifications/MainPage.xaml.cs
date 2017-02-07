@@ -43,7 +43,7 @@ namespace Win10Notifications
         // The watcher trigger used to configure the background task registration 
         private RfcommConnectionTrigger trigger;
         // A name is given to the task in order for it to be identifiable across context. 
-        private string taskName = "Bluetooth_BackgroundTask";
+        private string taskName = "Rfcomm_BackgroundTask";
         // Entry point for the background task. 
         private string taskEntryPoint = "Tasks.RfcommServerTask";
 
@@ -161,8 +161,6 @@ namespace Win10Notifications
                     break;
             }
 
-            // TODO: Request/check Listener access via UserNotificationListener.Current.RequestAccessAsync
-
             var backgroundStatus = await BackgroundExecutionManager.RequestAccessAsync();
 
             switch (backgroundStatus)
@@ -172,8 +170,6 @@ namespace Win10Notifications
                     await dialog.ShowAsync();
                     break;
             }
-
-            // TODO: Request/check background task access via BackgroundExecutionManager.RequestAccessAsync
 
             // If background task isn't registered yet
             if (!BackgroundTaskRegistration.AllTasks.Any(i => i.Value.Name.Equals("UserNotificationChanged")))
@@ -751,7 +747,7 @@ namespace Win10Notifications
 
             if (ApplicationData.Current.LocalSettings.Values.Keys.Contains("ReceivedMessage"))
             {
-                string backgroundMessage = (string)ApplicationData.Current.LocalSettings.Values["ReceivedMessage"];
+                //string backgroundMessage = (string)ApplicationData.Current.LocalSettings.Values["ReceivedMessage"];
                 string remoteDeviceName = (string)ApplicationData.Current.LocalSettings.Values["RemoteDeviceName"];
 
                 //if (!backgroundMessage.Equals(""))

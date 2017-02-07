@@ -14,7 +14,7 @@ namespace Win10Notifications
     class Constants
     {
         // The Chat Server's custom service Uuid: 34B1CF4D-1069-4AD6-89B6-E161D79BE4D8
-        public static readonly Guid RfcommChatServiceUuid = Guid.Parse("fa87c0d0-afac-11de-8a39-0800200c9a66");
+        public static readonly Guid RfcommChatServiceUuid = Guid.Parse("d2811b95-f5dd-4f84-b817-6becb507d786");
 
         // The Id of the Service Name SDP attribute
         public const UInt16 SdpServiceNameAttributeId = 0x100;
