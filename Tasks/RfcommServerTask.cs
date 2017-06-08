@@ -132,7 +132,7 @@ namespace Tasks
                         // Make sure that the connection is still up and there is a message to send
                         if (socket != null)
                         {
-                            writer.WriteUInt32((uint)message.Length);
+                            //writer.WriteUInt32((uint)message.Length);
                             writer.WriteString(message);
                             await writer.StoreAsync();
 

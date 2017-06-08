@@ -571,7 +571,7 @@ namespace Win10Notifications
                 if (_socket != null)
                 {
                     var message = notifMessage;
-                    _writer.WriteUInt32((uint)message.Length);
+                    //_writer.WriteUInt32((uint)message.Length);
                     _writer.WriteString(message);
 
                     ConversationListBox.Items.Add("Sent: " + message);
