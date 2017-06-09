@@ -213,11 +213,11 @@ namespace Win10Notifications
 
                         if (DisconnectButton.IsEnabled)
                         {
-                            SendMessage("Cleared", existingNotif);
+                            SendMessage("0", existingNotif);
                         }
                         else if (DisconnectButtonBg.IsEnabled)
                         {
-                            SendMessageBg("Cleared", existingNotif);
+                            SendMessageBg("0", existingNotif);
                         }
                     }
                 }
@@ -242,11 +242,11 @@ namespace Win10Notifications
 
                             if (DisconnectButton.IsEnabled)
                             {
-                                SendMessage("Reposition", platNotif);
+                                SendMessage("2", platNotif);
                             }
                             else if (DisconnectButtonBg.IsEnabled)
                             {
-                                SendMessageBg("Reposition", platNotif);
+                                SendMessageBg("2", platNotif);
                             }
                         }
 
@@ -261,11 +261,11 @@ namespace Win10Notifications
 
                         if (DisconnectButton.IsEnabled)
                         {
-                            SendMessage("New", platNotif);
+                            SendMessage("1", platNotif);
                         }
                         else if (DisconnectButtonBg.IsEnabled)
                         {
-                            SendMessageBg("New", platNotif);
+                            SendMessageBg("1", platNotif);
                         }
                     }
                 }
@@ -281,7 +281,7 @@ namespace Win10Notifications
         {
             foreach (var notification in Notifications)
             {
-                SendMessage("New", notification);
+                SendMessage("1", notification);
             }
         }
 
@@ -289,7 +289,7 @@ namespace Win10Notifications
         {
             foreach (var notification in Notifications)
             {
-                SendMessageBg("New", notification);
+                SendMessageBg("1", notification);
             }
         }
 
@@ -545,6 +545,7 @@ namespace Win10Notifications
         {
             // Get the toast binding, if present
             var toastBinding = notification.Notification.Visual.GetBinding(KnownNotificationBindings.ToastGeneric);
+            var id = notification.Id;
 
             var titleText = "No title";
             var bodyText = "";
@@ -562,7 +563,7 @@ namespace Win10Notifications
                 bodyText = string.Join("\n", textElements.Skip(1).Select(t => t.Text));
             }
 
-            var notifMessage = "(fg)" + type + ": " + titleText + ": " + bodyText;
+            var notifMessage = type + ";"  + id + ";" + titleText + ";" + bodyText;
 
             // There's no need to send a zero length message
             if (notifMessage.Length != 0)
@@ -570,11 +571,10 @@ namespace Win10Notifications
                 // Make sure that the connection is still up and there is a message to send
                 if (_socket != null)
                 {
-                    var message = notifMessage;
-                    //_writer.WriteUInt32((uint)message.Length);
-                    _writer.WriteString(message);
+                    //_writer.WriteUInt32((uint)notifMessage.Length);
+                    _writer.WriteString(notifMessage);
 
-                    ConversationListBox.Items.Add("Sent: " + message);
+                    ConversationListBox.Items.Add("Sent: " + notifMessage);
 
                     await _writer.StoreAsync();
                 }
@@ -591,6 +591,7 @@ namespace Win10Notifications
             {
                 // Get the toast binding, if present
                 var toastBinding = notification.Notification.Visual.GetBinding(KnownNotificationBindings.ToastGeneric);
+                var id = notification.Id;
 
                 var titleText = "No title";
                 var bodyText = "";
@@ -608,18 +609,17 @@ namespace Win10Notifications
                     bodyText = string.Join("\n", textElements.Skip(1).Select(t => t.Text));
                 }
 
-                var notifMessage = "(bg)" + type + ": " + titleText + ": " + bodyText;
+                var notifMessage = type + ";" + id + ";" + titleText + ";" + bodyText;
 
-                var message = notifMessage;
                 var previousMessage = (string) ApplicationData.Current.LocalSettings.Values["SendMessage"];
 
                 // Make sure previous message has been sent
                 if (previousMessage == null || previousMessage == "")
                 {
                     // Save the current message to local settings so the background task can pick it up. 
-                    ApplicationData.Current.LocalSettings.Values["SendMessage"] = message;
+                    ApplicationData.Current.LocalSettings.Values["SendMessage"] = notifMessage;
 
-                    ConversationListBox.Items.Add("Sent: " + message);
+                    ConversationListBox.Items.Add("Sent: " + notifMessage);
                 }
                 else
                 {

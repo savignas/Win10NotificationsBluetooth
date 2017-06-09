@@ -80,12 +80,16 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <StackPanel Margin="0,0,0,10" Orientation="Horizontal" Grid.Row="2" Grid.ColumnSpan="2">
-                    <Button Name="ListenButton" Margin="20,0,20,0" Click="ListenButton_Click">Start Bluetooth Foreground Server</Button>
-                    <Button x:Name="DisconnectButton" Margin="20,0,20,0" IsEnabled="False" Click="DisconnectButton_Click" Content="Disconnect Foreground Server"/>
-                    <Button Name="ListenButtonBg" Margin="20,0,20,0" Click="ListenButtonBg_Click">Start Bluetooth Background Server</Button>
-                    <Button x:Name="DisconnectButtonBg" Margin="20,0,20,0" IsEnabled="False" Click="DisconnectButtonBg_Click" Content="Disconnect Background Server"/>
-                </StackPanel>
+                <VariableSizedWrapGrid Orientation="Horizontal" Margin="0,0,0,10" Grid.Row="2">
+                    <VariableSizedWrapGrid Margin="0,0,0,10">
+                        <Button Name="ListenButton" Margin="20,0,20,5" Click="ListenButton_Click">Start Bluetooth Foreground Server</Button>
+                        <Button x:Name="DisconnectButton" Margin="20,0,20,5" IsEnabled="False" Click="DisconnectButton_Click" Content="Disconnect Foreground Server"/>
+                    </VariableSizedWrapGrid>
+                    <VariableSizedWrapGrid Margin="0,0,0,10">
+                        <Button Name="ListenButtonBg" Margin="20,0,20,5" Click="ListenButtonBg_Click">Start Bluetooth Background Server</Button>
+                        <Button x:Name="DisconnectButtonBg" Margin="20,0,20,5" IsEnabled="False" Click="DisconnectButtonBg_Click" Content="Disconnect Background Server"/>
+                    </VariableSizedWrapGrid>
+                </VariableSizedWrapGrid>
                 <ScrollViewer Grid.Row="3" VerticalScrollMode="Auto" VerticalScrollBarVisibility="Auto">
                     <Grid Margin="0,10,0,0">
                         <Grid.RowDefinitions>
