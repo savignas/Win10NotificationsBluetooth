@@ -546,24 +546,32 @@ namespace Win10Notifications
             // Get the toast binding, if present
             var toastBinding = notification.Notification.Visual.GetBinding(KnownNotificationBindings.ToastGeneric);
             var id = notification.Id;
+            var notifMessage = "";
 
-            var titleText = "No title";
-            var bodyText = "";
-
-            if (toastBinding != null)
+            if (type == "1")
             {
-                // And then get the text elements from the toast binding
-                var textElements = toastBinding.GetTextElements();
+                var titleText = "No title";
+                var bodyText = "";
 
-                // Treat the first text element as the title text
-                titleText = textElements.FirstOrDefault()?.Text;
+                if (toastBinding != null)
+                {
+                    // And then get the text elements from the toast binding
+                    var textElements = toastBinding.GetTextElements();
 
-                // We'll treat all subsequent text elements as body text,
-                // joining them together via newlines.
-                bodyText = string.Join("\n", textElements.Skip(1).Select(t => t.Text));
+                    // Treat the first text element as the title text
+                    titleText = textElements.FirstOrDefault()?.Text;
+
+                    // We'll treat all subsequent text elements as body text,
+                    // joining them together via newlines.
+                    bodyText = string.Join("\n", textElements.Skip(1).Select(t => t.Text));
+                }
+
+                notifMessage = type + ";" + id + ";" + titleText + ";" + bodyText;
             }
-
-            var notifMessage = type + ";"  + id + ";" + titleText + ";" + bodyText;
+            else
+            {
+                notifMessage = type + ";" + id;
+            }
 
             // There's no need to send a zero length message
             if (notifMessage.Length != 0)
@@ -814,15 +822,15 @@ namespace Win10Notifications
                 try
                 {
                     // Based on the protocol we've defined, the first uint is the size of the message
-                    var readLength = await reader.LoadAsync(sizeof(uint));
+                    var readLength = await reader.LoadAsync(sizeof(byte));
 
                     // Check if the size of the data is expected (otherwise the remote has already terminated the connection)
-                    if (readLength < sizeof(uint))
+                    if (readLength < sizeof(byte))
                     {
                         remoteDisconnection = true;
                         break;
                     }
-                    var currentLength = reader.ReadUInt32();
+                    var currentLength = (uint) reader.ReadByte();
 
                     // Load the rest of the message since you already know the length of the data expected.  
                     readLength = await reader.LoadAsync(currentLength);

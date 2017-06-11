@@ -92,14 +92,14 @@ namespace Tasks
         {
             while (true)
             {
-                uint readLength = await reader.LoadAsync(sizeof(uint));
-                if (readLength < sizeof(uint))
+                var readLength = await reader.LoadAsync(sizeof(byte));
+                if (readLength < sizeof(byte))
                 {
                     ApplicationData.Current.LocalSettings.Values["IsBackgroundTaskActive"] = false;
                     // Complete the background task (this raises the OnCompleted event on the corresponding BackgroundTaskRegistration). 
                     deferral.Complete();
                 }
-                uint currentLength = reader.ReadUInt32();
+                var currentLength = reader.ReadByte();
 
                 readLength = await reader.LoadAsync(currentLength);
                 if (readLength < currentLength)
