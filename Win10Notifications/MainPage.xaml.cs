@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Windows.ApplicationModel.Background;
+using Windows.ApplicationModel.Store;
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.Rfcomm;
 using Windows.Devices.Radios;
@@ -71,6 +72,8 @@ namespace Win10Notifications
                 0x69, 0x6e, 0x20, 0x43, 0x23                                    // in C#
 
         };
+
+        private StorageFile file;
 
         public MainPage()
         {
@@ -275,6 +278,19 @@ namespace Win10Notifications
                 Error = "Error updating notifications: " + ex;
             }
 
+        }
+
+        private async void CreateFile()
+        {
+            var folder = ApplicationData.Current.LocalFolder;
+            file = await folder.CreateFileAsync("win10notifications.txt",
+                CreationCollisionOption.ReplaceExisting);
+        }
+
+        private async void WriteFile(string text)
+        {
+            if (file != null)
+                await FileIO.AppendTextAsync(file, text + '\n');
         }
 
         private void SendNotificationsOnConnect()
@@ -583,6 +599,7 @@ namespace Win10Notifications
                     _writer.WriteString(notifMessage);
 
                     ConversationListBox.Items.Add("Sent: " + notifMessage);
+                    WriteFile("Sent: " + notifMessage);
 
                     await _writer.StoreAsync();
                 }
@@ -628,6 +645,7 @@ namespace Win10Notifications
                     ApplicationData.Current.LocalSettings.Values["SendMessage"] = notifMessage;
 
                     ConversationListBox.Items.Add("Sent: " + notifMessage);
+                    WriteFile("Sent: " + notifMessage);
                 }
                 else
                 {
@@ -755,18 +773,19 @@ namespace Win10Notifications
 
             if (ApplicationData.Current.LocalSettings.Values.Keys.Contains("ReceivedMessage"))
             {
-                //string backgroundMessage = (string)ApplicationData.Current.LocalSettings.Values["ReceivedMessage"];
+                string backgroundMessage = (string)ApplicationData.Current.LocalSettings.Values["ReceivedMessage"];
                 string remoteDeviceName = (string)ApplicationData.Current.LocalSettings.Values["RemoteDeviceName"];
 
-                //if (!backgroundMessage.Equals(""))
-                //{
+                if (!backgroundMessage.Equals(""))
+                {
                     await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
                     {
                         NotifyUser("Client Connected: " + remoteDeviceName, NotifyType.StatusMessage);
-                        //ConversationListBox.Items.Add("Received: " + backgroundMessage);
+                        ConversationListBox.Items.Add("Received: " + backgroundMessage);
+                        CreateFile();
                         SendNotificationsOnConnectBg();
                     });
-                //}
+                }
             }
         }
 
@@ -813,6 +832,7 @@ namespace Win10Notifications
             {
                 NotifyUser("Connected to Client: " + remoteDevice.Name, NotifyType.StatusMessage);
                 DisconnectButton.Content = "Disconnect from " + remoteDevice.Name;
+                CreateFile();
                 SendNotificationsOnConnect();
             });
 
