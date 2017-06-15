@@ -781,8 +781,10 @@ namespace Win10Notifications
                     await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
                     {
                         NotifyUser("Client Connected: " + remoteDeviceName, NotifyType.StatusMessage);
-                        ConversationListBox.Items.Add("Received: " + backgroundMessage);
                         CreateFile();
+                        ConversationListBox.Items.Add("Received: " + backgroundMessage);
+                        WriteFile("Received: " + backgroundMessage);
+                        RemoveNotification(UInt32.Parse(backgroundMessage));
                         SendNotificationsOnConnectBg();
                     });
                 }
@@ -866,6 +868,8 @@ namespace Win10Notifications
                     await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
                     {
                         ConversationListBox.Items.Add("Received: " + message);
+                        WriteFile("Received: " + message);
+                        RemoveNotification(UInt32.Parse(message));
                     });
                 }
                 // Catch exception HRESULT_FROM_WIN32(ERROR_OPERATION_ABORTED).
