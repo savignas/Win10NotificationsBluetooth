@@ -658,13 +658,13 @@ namespace Win10Notifications
 
         private void DisconnectButton_Click(object sender, RoutedEventArgs e)
         {
-            Disconnect();
+            DisconnectClick();
             NotifyUser("Disconnected.", NotifyType.StatusMessage);
         }
 
         private void DisconnectButtonBg_Click(object sender, RoutedEventArgs e)
         {
-            DisconnectBg();
+            DisconnectBgClick();
         } 
 
         /// <summary>
@@ -701,7 +701,7 @@ namespace Win10Notifications
             DisconnectBg();
         }
 
-        private async void Disconnect()
+        private async void DisconnectClick()
         {
             if (_rfcommProvider != null)
             {
@@ -736,7 +736,39 @@ namespace Win10Notifications
             });
         }
 
-        private async void DisconnectBg()
+        private async void Disconnect()
+        {
+            if (_rfcommProvider != null)
+            {
+                _rfcommProvider.StopAdvertising();
+                _rfcommProvider = null;
+            }
+
+            if (_socketListener != null)
+            {
+                _socketListener.Dispose();
+                _socketListener = null;
+            }
+
+            if (_writer != null)
+            {
+                _writer.DetachStream();
+                _writer = null;
+            }
+
+            if (_socket != null)
+            {
+                _socket.Dispose();
+                _socket = null;
+            }
+            await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
+            {
+                ConversationListBox.Items.Clear();
+                InitializeRfcommServer();
+            });
+        }
+
+        private async void DisconnectBgClick()
         {
             await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
             {
@@ -759,6 +791,29 @@ namespace Win10Notifications
                     // At this point we assume we haven't found any existing tasks matching the one we want to unregister
                     NotifyUser("No registered background watcher found.", NotifyType.StatusMessage);
                 }
+            });
+        }
+
+        private async void DisconnectBg()
+        {
+            await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
+            {
+                ConversationListBox.Items.Clear();
+
+                // Unregistering the background task will remove the Rfcomm Chat Service from the SDP record and stop listening for incoming connections
+                // First get the existing tasks to see if we already registered for it
+                if (taskRegistration != null)
+                {
+                    taskRegistration.Unregister(true);
+                    taskRegistration = null;
+                    NotifyUser("Background watcher unregistered.", NotifyType.StatusMessage);
+                }
+                else
+                {
+                    // At this point we assume we haven't found any existing tasks matching the one we want to unregister
+                    NotifyUser("No registered background watcher found.", NotifyType.StatusMessage);
+                }
+                InitializeRfcommServerBg();
             });
         }
 
