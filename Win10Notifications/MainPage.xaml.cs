@@ -557,7 +557,7 @@ namespace Win10Notifications
             rfcommProvider.SdpRawAttributes.Add(Constants.SdpServiceNameAttributeId, sdpWriter.DetachBuffer());
         }
 
-        private async void SendMessage(string type, UserNotification notification)
+        private string GetNotificationMessage(string type, UserNotification notification)
         {
             // Get the toast binding, if present
             var toastBinding = notification.Notification.Visual.GetBinding(KnownNotificationBindings.ToastGeneric);
@@ -566,11 +566,18 @@ namespace Win10Notifications
 
             if (type == "1")
             {
+                var appName = "";
                 var titleText = "No title";
                 var bodyText = "";
 
                 if (toastBinding != null)
                 {
+                    try
+                    {
+                        appName = notification.AppInfo.DisplayInfo.DisplayName;
+                    }
+                    catch (Exception ex) { }
+
                     // And then get the text elements from the toast binding
                     var textElements = toastBinding.GetTextElements();
 
@@ -582,12 +589,19 @@ namespace Win10Notifications
                     bodyText = string.Join("\n", textElements.Skip(1).Select(t => t.Text));
                 }
 
-                notifMessage = type + ";" + id + ";" + titleText + ";" + bodyText;
+                notifMessage = type + ";" + id + ";" + appName + ";" + titleText + ";" + bodyText;
             }
             else
             {
                 notifMessage = type + ";" + id;
             }
+
+            return notifMessage;
+        }
+
+        private async void SendMessage(string type, UserNotification notification)
+        {
+            var notifMessage = GetNotificationMessage(type, notification);
 
             // There's no need to send a zero length message
             if (notifMessage.Length != 0)
@@ -614,27 +628,7 @@ namespace Win10Notifications
         {
             while (true)
             {
-                // Get the toast binding, if present
-                var toastBinding = notification.Notification.Visual.GetBinding(KnownNotificationBindings.ToastGeneric);
-                var id = notification.Id;
-
-                var titleText = "No title";
-                var bodyText = "";
-
-                if (toastBinding != null)
-                {
-                    // And then get the text elements from the toast binding
-                    var textElements = toastBinding.GetTextElements();
-
-                    // Treat the first text element as the title text
-                    titleText = textElements.FirstOrDefault()?.Text;
-
-                    // We'll treat all subsequent text elements as body text,
-                    // joining them together via newlines.
-                    bodyText = string.Join("\n", textElements.Skip(1).Select(t => t.Text));
-                }
-
-                var notifMessage = type + ";" + id + ";" + titleText + ";" + bodyText;
+                var notifMessage = GetNotificationMessage(type, notification);
 
                 var previousMessage = (string) ApplicationData.Current.LocalSettings.Values["SendMessage"];
 
