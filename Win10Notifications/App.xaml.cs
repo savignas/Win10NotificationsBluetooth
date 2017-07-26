@@ -114,7 +114,7 @@ namespace Win10Notifications
             var deferral = args.TaskInstance.GetDeferral();
             switch (args.TaskInstance.Task.Name)
             {
-                case "UserNotificationChanged":
+                case "UserNotificationChanged2":
                     ((Window.Current.Content as Frame)?.Content as MainPage)?.UpdateNotifications();
                     break;
             }

@@ -41,12 +41,15 @@ namespace Win10Notifications
 
         // The background task registration for the background advertisement watcher 
         private IBackgroundTaskRegistration taskRegistration;
+        private IBackgroundTaskRegistration notificationListenerTaskRegistration;
         // The watcher trigger used to configure the background task registration 
         private RfcommConnectionTrigger trigger;
         // A name is given to the task in order for it to be identifiable across context. 
         private string taskName = "Rfcomm_BackgroundTask";
+        private string notificationListenerTaskName = "UserNotificationChanged";
         // Entry point for the background task. 
         private string taskEntryPoint = "Tasks.RfcommServerTask";
+        private string notificationListenerTaskEntryPoint = "Tasks.NotificationListenerTask";
 
         // Define the raw bytes that are converted into SDP record
         private byte[] sdpRecordBlob = new byte[]
@@ -164,23 +167,61 @@ namespace Win10Notifications
                     break;
             }
 
-            var backgroundStatus = await BackgroundExecutionManager.RequestAccessAsync();
+            // Registering a background trigger if it is not already registered. Rfcomm Chat Service will now be advertised in the SDP record
+            // First get the existing tasks to see if we already registered for it
 
-            switch (backgroundStatus)
+            foreach (var task in BackgroundTaskRegistration.AllTasks)
             {
-                case BackgroundAccessStatus.DeniedByUser:
-                    var dialog = new MessageDialog("You need to turn on access to background apps in privacy settings!", "Error");
-                    await dialog.ShowAsync();
+                if (task.Value.Name == notificationListenerTaskName)
+                {
+                    notificationListenerTaskRegistration = task.Value;
                     break;
+                }
+            }
+
+            if (notificationListenerTaskRegistration != null)
+            {
+                NotifyUser("Notification listener already registered.", NotifyType.StatusMessage);
+            }
+            else
+            {
+                // Applications registering for background trigger must request for permission.
+                BackgroundAccessStatus backgroundAccessStatus = await BackgroundExecutionManager.RequestAccessAsync();
+
+                var builder = new BackgroundTaskBuilder();
+                builder.TaskEntryPoint = notificationListenerTaskEntryPoint;
+                builder.SetTrigger(new UserNotificationChangedTrigger(NotificationKinds.Toast));
+                builder.Name = notificationListenerTaskName;
+
+                try
+                {
+                    notificationListenerTaskRegistration = builder.Register();
+                    AttachProgressAndCompletedHandlersNotificationListener(notificationListenerTaskRegistration);
+
+                    // Even though the trigger is registered successfully, it might be blocked. Notify the user if that is the case.
+                    if ((backgroundAccessStatus == BackgroundAccessStatus.AlwaysAllowed) || (backgroundAccessStatus == BackgroundAccessStatus.AllowedSubjectToSystemPolicy))
+                    {
+                        NotifyUser("Notification listener registered.", NotifyType.StatusMessage);
+                    }
+                    else
+                    {
+                        NotifyUser("Background tasks may be disabled for this app", NotifyType.ErrorMessage);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    NotifyUser("Notification listener not registered",
+                            NotifyType.ErrorMessage);
+                }
             }
 
             // If background task isn't registered yet
-            if (!BackgroundTaskRegistration.AllTasks.Any(i => i.Value.Name.Equals("UserNotificationChanged")))
+            if (!BackgroundTaskRegistration.AllTasks.Any(i => i.Value.Name.Equals("UserNotificationChanged2")))
             {
                 // Specify the background task
                 var builder = new BackgroundTaskBuilder()
                 {
-                    Name = "UserNotificationChanged"
+                    Name = "UserNotificationChanged2"
                 };
 
                 // Set the trigger for Listener, listening to Toast Notifications
@@ -218,10 +259,10 @@ namespace Win10Notifications
                         {
                             SendMessage("0", existingNotif);
                         }
-                        else if (DisconnectButtonBg.IsEnabled)
+                        /*else if (DisconnectButtonBg.IsEnabled)
                         {
                             SendMessageBg("0", existingNotif);
-                        }
+                        }*/
                     }
                 }
 
@@ -247,10 +288,10 @@ namespace Win10Notifications
                             {
                                 SendMessage("2", platNotif);
                             }
-                            else if (DisconnectButtonBg.IsEnabled)
+                            /*else if (DisconnectButtonBg.IsEnabled)
                             {
                                 SendMessageBg("2", platNotif);
-                            }
+                            }*/
                         }
 
                         // Otherwise, leave it in its place
@@ -266,10 +307,10 @@ namespace Win10Notifications
                         {
                             SendMessage("1", platNotif);
                         }
-                        else if (DisconnectButtonBg.IsEnabled)
+                        /*else if (DisconnectButtonBg.IsEnabled)
                         {
                             SendMessageBg("1", platNotif);
-                        }
+                        }*/
                     }
                 }
             }
@@ -695,6 +736,33 @@ namespace Win10Notifications
             DisconnectBg();
         }
 
+        private async void OnCompletedNotificationListener(BackgroundTaskRegistration sender, BackgroundTaskCompletedEventArgs args)
+        {
+            var settings = ApplicationData.Current.LocalSettings;
+            if (settings.Values.ContainsKey("NotificationListenerCancelationReason"))
+            {
+                await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
+                {
+                    NotifyUser("Notification listener cancelled unexpectedly - reason: " + settings.Values["NotificationListenerCancelationReason"].ToString(), NotifyType.ErrorMessage);
+                });
+            }
+            else
+            {
+                await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
+                {
+                    NotifyUser("Notification listener completed", NotifyType.StatusMessage);
+                });
+            }
+            try
+            {
+                args.CheckResult();
+            }
+            catch (Exception ex)
+            {
+                NotifyUser(ex.Message, NotifyType.ErrorMessage);
+            }
+        }
+
         private async void DisconnectClick()
         {
             if (_rfcommProvider != null)
@@ -840,10 +908,39 @@ namespace Win10Notifications
             }
         }
 
+        private void OnProgressNotificationListener(IBackgroundTaskRegistration task, BackgroundTaskProgressEventArgs args)
+        {
+
+            /*if (ApplicationData.Current.LocalSettings.Values.Keys.Contains("ReceivedMessage"))
+            {
+                string backgroundMessage = (string)ApplicationData.Current.LocalSettings.Values["ReceivedMessage"];
+                string remoteDeviceName = (string)ApplicationData.Current.LocalSettings.Values["RemoteDeviceName"];
+
+                if (!backgroundMessage.Equals(""))
+                {
+                    await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
+                    {
+                        NotifyUser("Client Connected: " + remoteDeviceName, NotifyType.StatusMessage);
+                        CreateFile();
+                        ConversationListBox.Items.Add("Received: " + backgroundMessage);
+                        WriteFile("Received: " + backgroundMessage);
+                        RemoveNotification(UInt32.Parse(backgroundMessage));
+                        SendNotificationsOnConnectBg();
+                    });
+                }
+            }*/
+        }
+
         private void AttachProgressAndCompletedHandlers(IBackgroundTaskRegistration task)
         {
             task.Progress += new BackgroundTaskProgressEventHandler(OnProgress);
             task.Completed += new BackgroundTaskCompletedEventHandler(OnCompleted);
+        }
+
+        private void AttachProgressAndCompletedHandlersNotificationListener(IBackgroundTaskRegistration task)
+        {
+            task.Progress += new BackgroundTaskProgressEventHandler(OnProgressNotificationListener);
+            task.Completed += new BackgroundTaskCompletedEventHandler(OnCompletedNotificationListener);
         }
 
         /// <summary>
@@ -966,6 +1063,26 @@ namespace Win10Notifications
                 ListenButton.IsEnabled = false;
                 ListenButtonBg.IsEnabled = false;
             }
+        }
+
+        private async void UnregisterNoticifationListener_Click(object sender, RoutedEventArgs e)
+        {
+            await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
+            {
+                // Unregistering the background task will remove the Rfcomm Chat Service from the SDP record and stop listening for incoming connections
+                // First get the existing tasks to see if we already registered for it
+                if (notificationListenerTaskRegistration != null)
+                {
+                    notificationListenerTaskRegistration.Unregister(true);
+                    notificationListenerTaskRegistration = null;
+                    NotifyUser("Notification listener unregistered.", NotifyType.StatusMessage);
+                }
+                else
+                {
+                    // At this point we assume we haven't found any existing tasks matching the one we want to unregister
+                    NotifyUser("No registered notification listener found.", NotifyType.StatusMessage);
+                }
+            });
         }
     }
 }
