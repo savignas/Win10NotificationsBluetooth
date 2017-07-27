@@ -120,6 +120,7 @@ namespace Tasks
                 string message = reader.ReadString(currentLength);
 
                 ApplicationData.Current.LocalSettings.Values["ReceivedMessage"] = message;
+                RemoveNotification(UInt32.Parse(message));
                 taskInstance.Progress += 1;
             }
         }
@@ -240,7 +241,7 @@ namespace Tasks
                     }
                 }
             }
-            catch (Exception ex) { }
+            catch (Exception) { }
         }
 
         private static int FindIndexOfNotification(uint notifId)
@@ -252,6 +253,18 @@ namespace Tasks
             }
 
             return -1;
+        }
+
+        public void RemoveNotification(uint notifId)
+        {
+            try
+            {
+                _listener.RemoveNotification(notifId);
+            }
+
+            catch (Exception) { }
+
+            UpdateNotifications();
         }
 
         private static void SendMessageBg(string type, UserNotification notification)
@@ -275,7 +288,7 @@ namespace Tasks
                         {
                             appName = notification.AppInfo.DisplayInfo.DisplayName;
                         }
-                        catch (Exception ex) { }
+                        catch (Exception) { }
 
                         // And then get the text elements from the toast binding
                         var textElements = toastBinding.GetTextElements();
