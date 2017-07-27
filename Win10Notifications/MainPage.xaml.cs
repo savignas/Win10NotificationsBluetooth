@@ -167,54 +167,6 @@ namespace Win10Notifications
                     break;
             }
 
-            // Registering a background trigger if it is not already registered. Rfcomm Chat Service will now be advertised in the SDP record
-            // First get the existing tasks to see if we already registered for it
-
-            foreach (var task in BackgroundTaskRegistration.AllTasks)
-            {
-                if (task.Value.Name == notificationListenerTaskName)
-                {
-                    notificationListenerTaskRegistration = task.Value;
-                    break;
-                }
-            }
-
-            if (notificationListenerTaskRegistration != null)
-            {
-                NotifyUser("Notification listener already registered.", NotifyType.StatusMessage);
-            }
-            else
-            {
-                // Applications registering for background trigger must request for permission.
-                BackgroundAccessStatus backgroundAccessStatus = await BackgroundExecutionManager.RequestAccessAsync();
-
-                var builder = new BackgroundTaskBuilder();
-                builder.TaskEntryPoint = notificationListenerTaskEntryPoint;
-                builder.SetTrigger(new UserNotificationChangedTrigger(NotificationKinds.Toast));
-                builder.Name = notificationListenerTaskName;
-
-                try
-                {
-                    notificationListenerTaskRegistration = builder.Register();
-                    AttachProgressAndCompletedHandlersNotificationListener(notificationListenerTaskRegistration);
-
-                    // Even though the trigger is registered successfully, it might be blocked. Notify the user if that is the case.
-                    if ((backgroundAccessStatus == BackgroundAccessStatus.AlwaysAllowed) || (backgroundAccessStatus == BackgroundAccessStatus.AllowedSubjectToSystemPolicy))
-                    {
-                        NotifyUser("Notification listener registered.", NotifyType.StatusMessage);
-                    }
-                    else
-                    {
-                        NotifyUser("Background tasks may be disabled for this app", NotifyType.ErrorMessage);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    NotifyUser("Notification listener not registered",
-                            NotifyType.ErrorMessage);
-                }
-            }
-
             // If background task isn't registered yet
             if (!BackgroundTaskRegistration.AllTasks.Any(i => i.Value.Name.Equals("UserNotificationChanged2")))
             {
@@ -524,15 +476,62 @@ namespace Win10Notifications
                     if ((backgroundAccessStatus == BackgroundAccessStatus.AlwaysAllowed) || (backgroundAccessStatus == BackgroundAccessStatus.AllowedSubjectToSystemPolicy))
                     {
                         NotifyUser("Background watcher registered.", NotifyType.StatusMessage);
+                        // Registering a background trigger if it is not already registered. Rfcomm Chat Service will now be advertised in the SDP record
+                        // First get the existing tasks to see if we already registered for it
                     }
                     else
                     {
                         NotifyUser("Background tasks may be disabled for this app", NotifyType.ErrorMessage);
                     }
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     NotifyUser("Background task not registered",
+                            NotifyType.ErrorMessage);
+                }
+            }
+
+            foreach (var task in BackgroundTaskRegistration.AllTasks)
+            {
+                if (task.Value.Name == notificationListenerTaskName)
+                {
+                    notificationListenerTaskRegistration = task.Value;
+                    break;
+                }
+            }
+
+            if (notificationListenerTaskRegistration != null)
+            {
+                NotifyUser("Notification listener already registered.", NotifyType.StatusMessage);
+            }
+            else
+            {
+                // Applications registering for background trigger must request for permission.
+                BackgroundAccessStatus backgroundAccessStatus = await BackgroundExecutionManager.RequestAccessAsync();
+
+                var builder = new BackgroundTaskBuilder();
+                builder.TaskEntryPoint = notificationListenerTaskEntryPoint;
+                builder.SetTrigger(new UserNotificationChangedTrigger(NotificationKinds.Toast));
+                builder.Name = notificationListenerTaskName;
+
+                try
+                {
+                    notificationListenerTaskRegistration = builder.Register();
+                    AttachProgressAndCompletedHandlersNotificationListener(notificationListenerTaskRegistration);
+
+                    // Even though the trigger is registered successfully, it might be blocked. Notify the user if that is the case.
+                    if ((backgroundAccessStatus == BackgroundAccessStatus.AlwaysAllowed) || (backgroundAccessStatus == BackgroundAccessStatus.AllowedSubjectToSystemPolicy))
+                    {
+                        NotifyUser("Notification listener registered.", NotifyType.StatusMessage);
+                    }
+                    else
+                    {
+                        NotifyUser("Background tasks may be disabled for this app", NotifyType.ErrorMessage);
+                    }
+                }
+                catch (Exception)
+                {
+                    NotifyUser("Notification listener not registered",
                             NotifyType.ErrorMessage);
                 }
             }
@@ -617,7 +616,7 @@ namespace Win10Notifications
                     {
                         appName = notification.AppInfo.DisplayInfo.DisplayName;
                     }
-                    catch (Exception ex) { }
+                    catch (Exception) { }
 
                     // And then get the text elements from the toast binding
                     var textElements = toastBinding.GetTextElements();
@@ -733,7 +732,7 @@ namespace Win10Notifications
             {
                 NotifyUser(ex.Message, NotifyType.ErrorMessage);
             }
-            DisconnectBg();
+            //DisconnectBg();
         }
 
         private async void OnCompletedNotificationListener(BackgroundTaskRegistration sender, BackgroundTaskCompletedEventArgs args)
@@ -852,6 +851,19 @@ namespace Win10Notifications
                 {
                     // At this point we assume we haven't found any existing tasks matching the one we want to unregister
                     NotifyUser("No registered background watcher found.", NotifyType.StatusMessage);
+                }
+                // Unregistering the background task will remove the Rfcomm Chat Service from the SDP record and stop listening for incoming connections
+                // First get the existing tasks to see if we already registered for it
+                if (notificationListenerTaskRegistration != null)
+                {
+                    notificationListenerTaskRegistration.Unregister(true);
+                    notificationListenerTaskRegistration = null;
+                    NotifyUser("Notification listener unregistered.", NotifyType.StatusMessage);
+                }
+                else
+                {
+                    // At this point we assume we haven't found any existing tasks matching the one we want to unregister
+                    NotifyUser("No registered notification listener found.", NotifyType.StatusMessage);
                 }
             });
         }
@@ -1063,26 +1075,6 @@ namespace Win10Notifications
                 ListenButton.IsEnabled = false;
                 ListenButtonBg.IsEnabled = false;
             }
-        }
-
-        private async void UnregisterNoticifationListener_Click(object sender, RoutedEventArgs e)
-        {
-            await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
-            {
-                // Unregistering the background task will remove the Rfcomm Chat Service from the SDP record and stop listening for incoming connections
-                // First get the existing tasks to see if we already registered for it
-                if (notificationListenerTaskRegistration != null)
-                {
-                    notificationListenerTaskRegistration.Unregister(true);
-                    notificationListenerTaskRegistration = null;
-                    NotifyUser("Notification listener unregistered.", NotifyType.StatusMessage);
-                }
-                else
-                {
-                    // At this point we assume we haven't found any existing tasks matching the one we want to unregister
-                    NotifyUser("No registered notification listener found.", NotifyType.StatusMessage);
-                }
-            });
         }
     }
 }

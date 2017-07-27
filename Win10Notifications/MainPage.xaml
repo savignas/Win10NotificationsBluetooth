@@ -89,7 +89,6 @@
                         <Button Name="ListenButtonBg" Margin="20,0,20,5" Click="ListenButtonBg_Click">Start Bluetooth Background Server</Button>
                         <Button x:Name="DisconnectButtonBg" Margin="20,0,20,5" IsEnabled="False" Click="DisconnectButtonBg_Click" Content="Disconnect Background Server"/>
                     </VariableSizedWrapGrid>
-                    <Button Name="UnregisterNoticifationListener" Margin="10,0,0,10" Click="UnregisterNoticifationListener_Click">Unregister Notification Listener</Button>
                 </VariableSizedWrapGrid>
                 <ScrollViewer Grid.Row="3" VerticalScrollMode="Auto" VerticalScrollBarVisibility="Auto">
                     <Grid Margin="0,0,0,0">
