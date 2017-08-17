@@ -173,7 +173,7 @@ namespace Tasks
             }
         }
 
-        static public async void UpdateNotifications()
+        public static async void UpdateNotifications()
         {
             try
             {

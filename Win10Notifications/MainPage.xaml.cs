@@ -2,7 +2,10 @@
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
+using System.Threading.Tasks;
+using Windows.ApplicationModel;
 using Windows.ApplicationModel.Background;
+using Windows.ApplicationModel.Core;
 using Windows.ApplicationModel.Store;
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.Rfcomm;
@@ -16,6 +19,8 @@ using Windows.UI.Popups;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
+using Microsoft.QueryStringDotNET;
+using Microsoft.Toolkit.Uwp.Notifications;
 
 // The Blank Page item template is documented at http://go.microsoft.com/fwlink/?LinkId=402352&clcid=0x409
 
@@ -190,6 +195,8 @@ namespace Win10Notifications
         {
             try
             {
+                var packageFamilyName = Package.Current.Id.FamilyName;
+
                 // Get the toast notifications
                 var notifsInPlatform = await _listener.GetNotificationsAsync(NotificationKinds.Toast);
 
@@ -207,6 +214,7 @@ namespace Win10Notifications
                         Notifications.RemoveAt(i);
                         i--;
 
+                        if (existingNotif.AppInfo.PackageFamilyName == packageFamilyName) continue;
                         if (DisconnectButton.IsEnabled)
                         {
                             SendMessage("0", existingNotif);
@@ -236,6 +244,7 @@ namespace Win10Notifications
                             // Move it to the right position
                             Notifications.Move(indexOfExisting, i);
 
+                            if (platNotif.AppInfo.PackageFamilyName == packageFamilyName) continue;
                             if (DisconnectButton.IsEnabled)
                             {
                                 SendMessage("2", platNotif);
@@ -255,6 +264,7 @@ namespace Win10Notifications
                         // Insert at that position
                         Notifications.Insert(i, platNotif);
 
+                        if (platNotif.AppInfo.PackageFamilyName == packageFamilyName) continue;
                         if (DisconnectButton.IsEnabled)
                         {
                             SendMessage("1", platNotif);
@@ -318,6 +328,7 @@ namespace Win10Notifications
             try
             {
                 _listener.RemoveNotification(notifId);
+                ToastNotificationManager.History.Remove(notifId.ToString());
             }
 
             catch (Exception ex)
@@ -326,6 +337,36 @@ namespace Win10Notifications
             }
 
             UpdateNotifications();
+        }
+
+        public void ShowNotification(string title, string content, string id)
+        {
+            ToastVisual visual = new ToastVisual()
+            {
+                BindingGeneric = new ToastBindingGeneric()
+                {
+                    Children =
+                    {
+                        new AdaptiveText()
+                        {
+                            Text = title
+                        },
+                        new AdaptiveText()
+                        {
+                            Text = content
+                        }
+                    }
+                }
+            };
+            ToastContent toastContent = new ToastContent()
+            {
+                Visual = visual
+            };
+
+            var toast = new ToastNotification(toastContent.GetXml());
+            toast.Tag = id;
+            ToastNotificationManager.CreateToastNotifier().Show(toast);
+
         }
 
         private static async void ShowMessage(string content, string title)
@@ -457,38 +498,36 @@ namespace Win10Notifications
                 NotifyUser("Background watcher already registered.", NotifyType.StatusMessage);
                 return;
             }
-            else
+            // Applications registering for background trigger must request for permission.
+            BackgroundAccessStatus backgroundAccessStatus = await BackgroundExecutionManager.RequestAccessAsync();
+
+            var builder = new BackgroundTaskBuilder();
+            builder.TaskEntryPoint = taskEntryPoint;
+            builder.SetTrigger(trigger);
+            builder.Name = taskName;
+
+            try
             {
-                // Applications registering for background trigger must request for permission.
-                BackgroundAccessStatus backgroundAccessStatus = await BackgroundExecutionManager.RequestAccessAsync();
+                taskRegistration = builder.Register();
+                AttachProgressAndCompletedHandlers(taskRegistration);
 
-                var builder = new BackgroundTaskBuilder();
-                builder.TaskEntryPoint = taskEntryPoint;
-                builder.SetTrigger(trigger);
-                builder.Name = taskName;
-
-                try
+                // Even though the trigger is registered successfully, it might be blocked. Notify the user if that is the case.
+                if ((backgroundAccessStatus == BackgroundAccessStatus.AlwaysAllowed) ||
+                    (backgroundAccessStatus == BackgroundAccessStatus.AllowedSubjectToSystemPolicy))
                 {
-                    taskRegistration = builder.Register();
-                    AttachProgressAndCompletedHandlers(taskRegistration);
-
-                    // Even though the trigger is registered successfully, it might be blocked. Notify the user if that is the case.
-                    if ((backgroundAccessStatus == BackgroundAccessStatus.AlwaysAllowed) || (backgroundAccessStatus == BackgroundAccessStatus.AllowedSubjectToSystemPolicy))
-                    {
-                        NotifyUser("Background watcher registered.", NotifyType.StatusMessage);
-                        // Registering a background trigger if it is not already registered. Rfcomm Chat Service will now be advertised in the SDP record
-                        // First get the existing tasks to see if we already registered for it
-                    }
-                    else
-                    {
-                        NotifyUser("Background tasks may be disabled for this app", NotifyType.ErrorMessage);
-                    }
+                    NotifyUser("Background watcher registered.", NotifyType.StatusMessage);
+                    // Registering a background trigger if it is not already registered. Rfcomm Chat Service will now be advertised in the SDP record
+                    // First get the existing tasks to see if we already registered for it
                 }
-                catch (Exception)
+                else
                 {
-                    NotifyUser("Background task not registered",
-                            NotifyType.ErrorMessage);
+                    NotifyUser("Background tasks may be disabled for this app", NotifyType.ErrorMessage);
                 }
+            }
+            catch (Exception)
+            {
+                NotifyUser("Background task not registered",
+                    NotifyType.ErrorMessage);
             }
 
             foreach (var task in BackgroundTaskRegistration.AllTasks)
@@ -507,9 +546,9 @@ namespace Win10Notifications
             else
             {
                 // Applications registering for background trigger must request for permission.
-                BackgroundAccessStatus backgroundAccessStatus = await BackgroundExecutionManager.RequestAccessAsync();
+                backgroundAccessStatus = await BackgroundExecutionManager.RequestAccessAsync();
 
-                var builder = new BackgroundTaskBuilder();
+                builder = new BackgroundTaskBuilder();
                 builder.TaskEntryPoint = notificationListenerTaskEntryPoint;
                 builder.SetTrigger(new UserNotificationChangedTrigger(NotificationKinds.Toast));
                 builder.Name = notificationListenerTaskName;
@@ -1027,7 +1066,16 @@ namespace Win10Notifications
                     {
                         ConversationListBox.Items.Add("Received: " + message);
                         WriteFile("Received: " + message);
-                        RemoveNotification(UInt32.Parse(message));
+                        var messageParts = message.Split(';');
+
+                        if (messageParts[0] == "0")
+                        {
+                            RemoveNotification(UInt32.Parse(messageParts[1]));
+                        }
+                        else if (messageParts[0] == "1")
+                        {
+                            ShowNotification(messageParts[2], messageParts[3], messageParts[1]);
+                        }
                     });
                 }
                 // Catch exception HRESULT_FROM_WIN32(ERROR_OPERATION_ABORTED).
