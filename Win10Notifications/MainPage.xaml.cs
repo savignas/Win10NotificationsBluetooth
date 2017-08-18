@@ -2,11 +2,8 @@
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
-using System.Threading.Tasks;
 using Windows.ApplicationModel;
 using Windows.ApplicationModel.Background;
-using Windows.ApplicationModel.Core;
-using Windows.ApplicationModel.Store;
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.Rfcomm;
 using Windows.Devices.Radios;
@@ -19,7 +16,6 @@ using Windows.UI.Popups;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
-using Microsoft.QueryStringDotNET;
 using Microsoft.Toolkit.Uwp.Notifications;
 
 // The Blank Page item template is documented at http://go.microsoft.com/fwlink/?LinkId=402352&clcid=0x409
@@ -36,6 +32,7 @@ namespace Win10Notifications
         public string Error { get; set; }
 
         public ObservableCollection<UserNotification> Notifications { get; } = new ObservableCollection<UserNotification>();
+        public ObservableCollection<ToastNotification> AndroidNotifications { get; } = new ObservableCollection<ToastNotification>();
 
         private RadioModel _bluetooth;
 
@@ -226,6 +223,23 @@ namespace Win10Notifications
                     }
                 }
 
+                var androidNotificationHistory = ToastNotificationManager.History.GetHistory();
+                for (var i = 0; i < AndroidNotifications.Count; i++)
+                {
+                    var existingAndroidNotif = AndroidNotifications[i];
+
+                    if (!androidNotificationHistory.Any(n => n.Tag == existingAndroidNotif.Tag))
+                    {
+                        AndroidNotifications.RemoveAt(i);
+                        i--;
+
+                        if (DisconnectButton.IsEnabled)
+                        {
+                            SendMessage("0;" + existingAndroidNotif.Tag);
+                        }
+                    }
+                }
+
                 // Now our list only contains notifications that exist,
                 // but it might be missing new notifications.
 
@@ -292,8 +306,15 @@ namespace Win10Notifications
 
         private async void WriteFile(string text)
         {
-            if (file != null)
+            if (file == null) return;
+            try
+            {
                 await FileIO.AppendTextAsync(file, text + '\n');
+            }
+            catch (Exception)
+            {
+                // ignored
+            }
         }
 
         private void SendNotificationsOnConnect()
@@ -328,7 +349,6 @@ namespace Win10Notifications
             try
             {
                 _listener.RemoveNotification(notifId);
-                ToastNotificationManager.History.Remove(notifId.ToString());
             }
 
             catch (Exception ex)
@@ -339,7 +359,7 @@ namespace Win10Notifications
             UpdateNotifications();
         }
 
-        public void ShowNotification(string title, string content, string id)
+        public void ShowNotification(string title, string content, string key)
         {
             ToastVisual visual = new ToastVisual()
             {
@@ -364,9 +384,9 @@ namespace Win10Notifications
             };
 
             var toast = new ToastNotification(toastContent.GetXml());
-            toast.Tag = id;
+            toast.Tag = key;
             ToastNotificationManager.CreateToastNotifier().Show(toast);
-
+            AndroidNotifications.Add(toast);
         }
 
         private static async void ShowMessage(string content, string title)
@@ -682,6 +702,29 @@ namespace Win10Notifications
         {
             var notifMessage = GetNotificationMessage(type, notification);
 
+            // There's no need to send a zero length message
+            if (notifMessage.Length != 0)
+            {
+                // Make sure that the connection is still up and there is a message to send
+                if (_socket != null)
+                {
+                    //_writer.WriteUInt32((uint)notifMessage.Length);
+                    _writer.WriteString(notifMessage);
+
+                    ConversationListBox.Items.Add("Sent: " + notifMessage);
+                    WriteFile("Sent: " + notifMessage);
+
+                    await _writer.StoreAsync();
+                }
+                else
+                {
+                    NotifyUser("No clients connected, please wait for a client to connect before attempting to send a notification", NotifyType.StatusMessage);
+                }
+            }
+        }
+
+        private async void SendMessage(string notifMessage)
+        {
             // There's no need to send a zero length message
             if (notifMessage.Length != 0)
             {
@@ -1068,13 +1111,21 @@ namespace Win10Notifications
                         WriteFile("Received: " + message);
                         var messageParts = message.Split(';');
 
-                        if (messageParts[0] == "0")
+                        switch (messageParts[0])
                         {
-                            RemoveNotification(UInt32.Parse(messageParts[1]));
-                        }
-                        else if (messageParts[0] == "1")
-                        {
-                            ShowNotification(messageParts[2], messageParts[3], messageParts[1]);
+                            case "0":
+                                try
+                                {
+                                    RemoveNotification(UInt32.Parse(messageParts[1]));
+                                }
+                                catch (Exception)
+                                {
+                                    ToastNotificationManager.History.Remove(messageParts[1]);
+                                }
+                                break;
+                            case "1":
+                                ShowNotification(messageParts[2], messageParts[3], messageParts[1]);
+                                break;
                         }
                     });
                 }
