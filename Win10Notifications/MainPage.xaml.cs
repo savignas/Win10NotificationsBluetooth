@@ -7,15 +7,18 @@ using Windows.ApplicationModel.Background;
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.Rfcomm;
 using Windows.Devices.Radios;
+using Windows.Graphics.Printing;
 using Windows.Networking.Sockets;
 using Windows.Storage;
 using Windows.Storage.Streams;
+using Windows.UI.Core;
 using Windows.UI.Notifications;
 using Windows.UI.Notifications.Management;
 using Windows.UI.Popups;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
+using Windows.UI.Xaml.Navigation;
 using Microsoft.Toolkit.Uwp.Notifications;
 
 // The Blank Page item template is documented at http://go.microsoft.com/fwlink/?LinkId=402352&clcid=0x409
@@ -78,7 +81,16 @@ namespace Win10Notifications
 
         };
 
-        private StorageFile file;
+        private StorageFile _file;
+
+        private readonly string _packageFamilyName = Package.Current.Id.FamilyName;
+
+        private object _sendNotifications;
+
+        private readonly ApplicationDataContainer _localSettings =
+            ApplicationData.Current.LocalSettings;
+
+        private ApplicationDataContainer _notificationApps;
 
         public MainPage()
         {
@@ -93,6 +105,27 @@ namespace Win10Notifications
 
             // The SDP record is nice in order to populate optional name and description fields
             trigger.InboundConnection.SdpRecord = sdpRecordBlob.AsBuffer();
+
+            _notificationApps = _localSettings.CreateContainer("notificationApps", ApplicationDataCreateDisposition.Always);
+        }
+
+        protected override void OnNavigatedTo(NavigationEventArgs e)
+        {
+            var rootFrame = Window.Current.Content as Frame;
+
+            if (rootFrame.CanGoBack)
+            {
+                // Show UI in title bar if opted-in and in-app backstack is not empty.
+                SystemNavigationManager.GetForCurrentView().AppViewBackButtonVisibility =
+                    AppViewBackButtonVisibility.Visible;
+            }
+            else
+            {
+                // Remove the UI from the title bar if in-app back stack is empty.
+                SystemNavigationManager.GetForCurrentView().AppViewBackButtonVisibility =
+                    AppViewBackButtonVisibility.Collapsed;
+            }
+
         }
 
         private void ListViewNotifications_ItemClick(object sender, ItemClickEventArgs e)
@@ -127,47 +160,10 @@ namespace Win10Notifications
             UpdateNotifications();
         }
 
-        private async void InitializeNotificationListener()
+        private void InitializeNotificationListener()
         {
             // Get the listener
             _listener = UserNotificationListener.Current;
-
-            // And request access to the user's notifications (must be called from UI thread)
-            var accessStatus = await _listener.RequestAccessAsync();
-
-            switch (accessStatus)
-            {
-                // This means the user has granted access.
-                case UserNotificationListenerAccessStatus.Allowed:
-
-                    // Yay! Proceed as normal
-                    break;
-
-                // This means the user has denied access.
-                // Any further calls to RequestAccessAsync will instantly
-                // return Denied. The user must go to the Windows settings
-                // and manually allow access.
-                case UserNotificationListenerAccessStatus.Denied:
-
-                    // Show UI explaining that listener features will not
-                    // work until user allows access.
-                    var dialog = new MessageDialog("You need to turn on access to notifications in privacy settings!", "Error");
-                    dialog.Commands.Add(new UICommand { Label = "Close", Id = 0 });
-                    var res = await dialog.ShowAsync();
-                    if ((int)res.Id == 0)
-                    {
-                        Application.Current.Exit();
-                    }
-                    break;
-
-                // This means the user closed the prompt without
-                // selecting either allow or deny. Further calls to
-                // RequestAccessAsync will show the dialog again.
-                case UserNotificationListenerAccessStatus.Unspecified:
-
-                    // Show UI that allows the user to bring up the prompt again
-                    break;
-            }
 
             // If background task isn't registered yet
             if (!BackgroundTaskRegistration.AllTasks.Any(i => i.Value.Name.Equals("UserNotificationChanged2")))
@@ -192,7 +188,7 @@ namespace Win10Notifications
         {
             try
             {
-                var packageFamilyName = Package.Current.Id.FamilyName;
+                _sendNotifications = _localSettings.Values["sendNotifications"];
 
                 // Get the toast notifications
                 var notifsInPlatform = await _listener.GetNotificationsAsync(NotificationKinds.Toast);
@@ -211,15 +207,18 @@ namespace Win10Notifications
                         Notifications.RemoveAt(i);
                         i--;
 
-                        if (existingNotif.AppInfo.PackageFamilyName == packageFamilyName) continue;
-                        if (DisconnectButton.IsEnabled)
+                        if (existingNotif.AppInfo.PackageFamilyName != _packageFamilyName &&
+                            _sendNotifications != null && (bool) _sendNotifications)
                         {
-                            SendMessage("0", existingNotif);
+                            if (DisconnectButton.IsEnabled)
+                            {
+                                SendMessage("0", existingNotif);
+                            }
+                            /*else if (DisconnectButtonBg.IsEnabled)
+                            {
+                                SendMessageBg("0", existingNotif);
+                            }*/
                         }
-                        /*else if (DisconnectButtonBg.IsEnabled)
-                        {
-                            SendMessageBg("0", existingNotif);
-                        }*/
                     }
                 }
 
@@ -258,15 +257,18 @@ namespace Win10Notifications
                             // Move it to the right position
                             Notifications.Move(indexOfExisting, i);
 
-                            if (platNotif.AppInfo.PackageFamilyName == packageFamilyName) continue;
-                            if (DisconnectButton.IsEnabled)
+                            if (platNotif.AppInfo.PackageFamilyName != _packageFamilyName &&
+                                _sendNotifications != null && (bool) _sendNotifications)
                             {
-                                SendMessage("2", platNotif);
+                                if (DisconnectButton.IsEnabled)
+                                {
+                                    SendMessage("2", platNotif);
+                                }
+                                /*else if (DisconnectButtonBg.IsEnabled)
+                                {
+                                    SendMessageBg("2", platNotif);
+                                }*/
                             }
-                            /*else if (DisconnectButtonBg.IsEnabled)
-                            {
-                                SendMessageBg("2", platNotif);
-                            }*/
                         }
 
                         // Otherwise, leave it in its place
@@ -278,15 +280,34 @@ namespace Win10Notifications
                         // Insert at that position
                         Notifications.Insert(i, platNotif);
 
-                        if (platNotif.AppInfo.PackageFamilyName == packageFamilyName) continue;
-                        if (DisconnectButton.IsEnabled)
+                        if (_localSettings.Containers.ContainsKey("notificationApps"))
                         {
-                            SendMessage("1", platNotif);
+                            var isInContainer = _notificationApps.Values[platNotif.AppInfo.PackageFamilyName];
+
+                            if (isInContainer == null)
+                            {
+                                var app = new ApplicationDataCompositeValue
+                                {
+                                    ["name"] = platNotif.AppInfo.DisplayInfo.DisplayName,
+                                    ["value"] = true
+                                };
+
+                                _notificationApps.Values[platNotif.AppInfo.PackageFamilyName] = app;
+                            }
                         }
-                        /*else if (DisconnectButtonBg.IsEnabled)
+
+                        if (platNotif.AppInfo.PackageFamilyName != _packageFamilyName &&
+                            _sendNotifications != null && (bool) _sendNotifications)
                         {
-                            SendMessageBg("1", platNotif);
-                        }*/
+                            if (DisconnectButton.IsEnabled)
+                            {
+                                SendMessage("1", platNotif);
+                            }
+                            /*else if (DisconnectButtonBg.IsEnabled)
+                            {
+                                SendMessageBg("1", platNotif);
+                            }*/
+                        }
                     }
                 }
             }
@@ -300,16 +321,16 @@ namespace Win10Notifications
         private async void CreateFile()
         {
             var folder = ApplicationData.Current.LocalFolder;
-            file = await folder.CreateFileAsync("win10notifications.txt",
+            _file = await folder.CreateFileAsync("win10notifications.txt",
                 CreationCollisionOption.ReplaceExisting);
         }
 
         private async void WriteFile(string text)
         {
-            if (file == null) return;
+            if (_file == null) return;
             try
             {
-                await FileIO.AppendTextAsync(file, text + '\n');
+                await FileIO.AppendTextAsync(_file, text + '\n');
             }
             catch (Exception)
             {
@@ -361,30 +382,29 @@ namespace Win10Notifications
 
         public void ShowNotification(string title, string content, string key)
         {
-            ToastVisual visual = new ToastVisual()
+            var visual = new ToastVisual
             {
-                BindingGeneric = new ToastBindingGeneric()
+                BindingGeneric = new ToastBindingGeneric
                 {
                     Children =
                     {
-                        new AdaptiveText()
+                        new AdaptiveText
                         {
                             Text = title
                         },
-                        new AdaptiveText()
+                        new AdaptiveText
                         {
                             Text = content
                         }
                     }
                 }
             };
-            ToastContent toastContent = new ToastContent()
+            var toastContent = new ToastContent
             {
                 Visual = visual
             };
 
-            var toast = new ToastNotification(toastContent.GetXml());
-            toast.Tag = key;
+            var toast = new ToastNotification(toastContent.GetXml()) {Tag = key};
             ToastNotificationManager.CreateToastNotifier().Show(toast);
             AndroidNotifications.Add(toast);
         }
@@ -619,12 +639,10 @@ namespace Win10Notifications
             if (StatusBlock.Text != String.Empty)
             {
                 StatusBorder.Visibility = Visibility.Visible;
-                StatusPanel.Visibility = Visibility.Visible;
             }
             else
             {
                 StatusBorder.Visibility = Visibility.Collapsed;
-                StatusPanel.Visibility = Visibility.Collapsed;
             }
         }
 
@@ -718,7 +736,7 @@ namespace Win10Notifications
                 }
                 else
                 {
-                    NotifyUser("No clients connected, please wait for a client to connect before attempting to send a notification", NotifyType.StatusMessage);
+                    NotifyUser("No clients connected", NotifyType.StatusMessage);
                 }
             }
         }
@@ -1075,7 +1093,10 @@ namespace Win10Notifications
                 NotifyUser("Connected to Client: " + remoteDevice.Name, NotifyType.StatusMessage);
                 DisconnectButton.Content = "Disconnect from " + remoteDevice.Name;
                 CreateFile();
-                SendNotificationsOnConnect();
+                if (_sendNotifications != null && (bool) _sendNotifications)
+                {
+                    SendNotificationsOnConnect();
+                }
             });
 
             // Infinite read buffer loop
@@ -1174,6 +1195,11 @@ namespace Win10Notifications
                 ListenButton.IsEnabled = false;
                 ListenButtonBg.IsEnabled = false;
             }
+        }
+
+        private void SettingsButton_Click(object sender, RoutedEventArgs e)
+        {
+            this.Frame.Navigate(typeof(Settings));
         }
     }
 }

@@ -58,7 +58,6 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
                 <StackPanel Margin="0,0,0,10">
@@ -80,17 +79,7 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <VariableSizedWrapGrid Orientation="Horizontal" Margin="0,0,0,10" Grid.Row="2">
-                    <VariableSizedWrapGrid Margin="0,0,0,10">
-                        <Button Name="ListenButton" Margin="20,0,20,5" Click="ListenButton_Click">Start Bluetooth Foreground Server</Button>
-                        <Button x:Name="DisconnectButton" Margin="20,0,20,5" IsEnabled="False" Click="DisconnectButton_Click" Content="Disconnect Foreground Server"/>
-                    </VariableSizedWrapGrid>
-                    <VariableSizedWrapGrid Margin="0,0,0,10">
-                        <Button Name="ListenButtonBg" Margin="20,0,20,5" Click="ListenButtonBg_Click">Start Bluetooth Background Server</Button>
-                        <Button x:Name="DisconnectButtonBg" Margin="20,0,20,5" IsEnabled="False" Click="DisconnectButtonBg_Click" Content="Disconnect Background Server"/>
-                    </VariableSizedWrapGrid>
-                </VariableSizedWrapGrid>
-                <ScrollViewer Grid.Row="3" VerticalScrollMode="Auto" VerticalScrollBarVisibility="Auto">
+                <ScrollViewer Grid.Row="2" VerticalScrollMode="Auto" VerticalScrollBarVisibility="Auto">
                     <Grid Margin="0,0,0,0">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*"/>
@@ -100,18 +89,23 @@
                     </Grid>
                 </ScrollViewer>
             </Grid>
-            <RelativePanel Grid.Row="1">
-                <Frame x:Name="ScenarioFrame" Margin="0,5,0,0" RelativePanel.AlignTopWithPanel="True" RelativePanel.Above="StatusPanel" RelativePanel.AlignRightWithPanel="True" RelativePanel.AlignLeftWithPanel="True"/>
-                <StackPanel x:Name="StatusPanel" Orientation="Vertical" RelativePanel.AlignBottomWithPanel="True" RelativePanel.AlignRightWithPanel="True" RelativePanel.AlignLeftWithPanel="True">
-                    <TextBlock x:Name="StatusLabel" Margin="10,0,0,10" TextWrapping="Wrap" Text="Status:" />
-                    <Border x:Name="StatusBorder" Margin="10,0,10,10">
-                        <ScrollViewer VerticalScrollMode="Auto"  VerticalScrollBarVisibility="Auto" MaxHeight="200">
-                            <TextBlock x:Name="StatusBlock" FontWeight="Bold" 
-                                   MaxWidth="{Binding ElementName=Splitter, Path=ActualWidth}" Margin="10,10,10,20" TextWrapping="Wrap"  />
-                        </ScrollViewer>
+            <CommandBar Grid.Row="1" Margin="10,0,10,0">
+                <AppBarButton Name="ListenButton" Icon="Play" Label="Start FG" Click="ListenButton_Click"/>
+                <AppBarButton x:Name="DisconnectButton" Icon="Stop" Label="Stop FG" Click="DisconnectButton_Click" IsEnabled="False"/>
+                <AppBarSeparator/>
+                <AppBarButton Name="ListenButtonBg" Icon="Play" Label="Start BG" Click="ListenButtonBg_Click"/>
+                <AppBarButton x:Name="DisconnectButtonBg" Icon="Stop" Label="Stop BG" Click="DisconnectButtonBg_Click" IsEnabled="False"/>
+
+                <CommandBar.SecondaryCommands>
+                    <AppBarButton Name="SettingsButton" Icon="Setting" Label="Settings" Click="SettingsButton_Click" />
+                </CommandBar.SecondaryCommands>
+
+                <CommandBar.Content>
+                    <Border x:Name="StatusBorder">
+                        <TextBlock x:Name="StatusBlock" Text="Status:" Margin="12,14"/>
                     </Border>
-                </StackPanel>
-            </RelativePanel>
+                </CommandBar.Content>
+            </CommandBar>
         </Grid>
     </Grid>
 </Page>
