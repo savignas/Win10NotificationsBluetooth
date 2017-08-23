@@ -44,7 +44,7 @@
                     Style="{ThemeResource CaptionTextBlockStyle}"/>
                 <TextBlock
                     x:Name="TextBlockAppName"
-                    Text="Facebook"
+                    Text="App"
                     Style="{ThemeResource CaptionTextBlockStyle}"/>
             </StackPanel>
 

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Windows.Foundation;
 using Windows.Foundation.Collections;
+using Windows.Storage;
 using Windows.UI.Core;
 using Windows.UI.Notifications.Management;
 using Windows.UI.Popups;
@@ -15,6 +16,7 @@ using Windows.UI.Xaml.Data;
 using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Navigation;
+using Win10Notifications.Models;
 
 // The Blank Page item template is documented at https://go.microsoft.com/fwlink/?LinkId=234238
 
@@ -27,13 +29,19 @@ namespace Win10Notifications
     {
         private UserNotificationListener _listener;
 
-        private readonly Windows.Storage.ApplicationDataContainer _localSettings =
-            Windows.Storage.ApplicationData.Current.LocalSettings;
+        private readonly ApplicationDataContainer _localSettings =
+            ApplicationData.Current.LocalSettings;
+
+        private readonly StorageFolder _localFolder =
+            ApplicationData.Current.LocalFolder;
+
+        List<NotificationApp> NotificationApps = new List<NotificationApp>();
 
         public Settings()
         {
             this.InitializeComponent();
             SetSendNotificationsToggle();
+            ReadNotificationApps();
 
             SystemNavigationManager.GetForCurrentView().BackRequested += Settings_BackRequested;
         }
@@ -63,6 +71,23 @@ namespace Win10Notifications
             if (enabled != null && (bool) enabled)
             {
                 SendNotifications.IsOn = (bool) enabled;
+            }
+        }
+
+        private async void ReadNotificationApps()
+        {
+            try
+            {
+                var notificationApps = await _localFolder.GetFileAsync("notificationApps");
+                var data = await FileIO.ReadBufferAsync(notificationApps);
+                var notificationApp = await NotificationApp.Deserialize(data.ToArray());
+                NotificationApps.Add(notificationApp);
+
+                ListViewNotificationApps.ItemsSource = NotificationApps;
+            }
+            catch (Exception)
+            {
+                // ignored
             }
         }
 

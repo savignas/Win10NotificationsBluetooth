@@ -5,22 +5,22 @@ using Windows.Devices.Radios;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
 
-namespace Win10Notifications
+namespace Win10Notifications.Models
 {
-    public class RadioModel : INotifyPropertyChanged
+    public class Radio : INotifyPropertyChanged
     {
-        private Radio radio;
+        private Windows.Devices.Radios.Radio radio;
         private bool isEnabled = true;
         private UIElement parent;
 
-        public RadioModel(Radio radio, UIElement parent)
+        public Radio(Windows.Devices.Radios.Radio radio, UIElement parent)
         {
             this.radio = radio;
             this.parent = parent;
             this.radio.StateChanged += Radio_StateChanged;
         }
 
-        private async void Radio_StateChanged(Radio sender, object args)
+        private async void Radio_StateChanged(Windows.Devices.Radios.Radio sender, object args)
         {
             // The Radio StateChanged event doesn't run from the UI thread, so we must use the dispatcher
             // to run NotifyPropertyChanged

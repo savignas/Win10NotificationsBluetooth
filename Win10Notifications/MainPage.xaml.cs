@@ -1,12 +1,15 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
+using System.Threading.Tasks;
 using Windows.ApplicationModel;
 using Windows.ApplicationModel.Background;
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.Rfcomm;
 using Windows.Devices.Radios;
+using Windows.Foundation;
 using Windows.Graphics.Printing;
 using Windows.Networking.Sockets;
 using Windows.Storage;
@@ -18,8 +21,11 @@ using Windows.UI.Popups;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
+using Windows.UI.Xaml.Media.Imaging;
 using Windows.UI.Xaml.Navigation;
 using Microsoft.Toolkit.Uwp.Notifications;
+using Win10Notifications.Models;
+using Radio = Win10Notifications.Models.Radio;
 
 // The Blank Page item template is documented at http://go.microsoft.com/fwlink/?LinkId=402352&clcid=0x409
 
@@ -37,7 +43,7 @@ namespace Win10Notifications
         public ObservableCollection<UserNotification> Notifications { get; } = new ObservableCollection<UserNotification>();
         public ObservableCollection<ToastNotification> AndroidNotifications { get; } = new ObservableCollection<ToastNotification>();
 
-        private RadioModel _bluetooth;
+        private Radio _bluetooth;
 
         private StreamSocket _socket;
         private DataWriter _writer;
@@ -90,7 +96,10 @@ namespace Win10Notifications
         private readonly ApplicationDataContainer _localSettings =
             ApplicationData.Current.LocalSettings;
 
-        private ApplicationDataContainer _notificationApps;
+        private readonly StorageFolder _localFolder =
+            ApplicationData.Current.LocalFolder;
+
+        List<NotificationApp> NotificationApps = new List<NotificationApp>();
 
         public MainPage()
         {
@@ -105,8 +114,6 @@ namespace Win10Notifications
 
             // The SDP record is nice in order to populate optional name and description fields
             trigger.InboundConnection.SdpRecord = sdpRecordBlob.AsBuffer();
-
-            _notificationApps = _localSettings.CreateContainer("notificationApps", ApplicationDataCreateDisposition.Always);
         }
 
         protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -280,20 +287,23 @@ namespace Win10Notifications
                         // Insert at that position
                         Notifications.Insert(i, platNotif);
 
-                        if (_localSettings.Containers.ContainsKey("notificationApps"))
+                        await ReadNotificationApps();
+
+                        if (!NotificationApps.Any(x => x.Key == platNotif.AppInfo.PackageFamilyName))
                         {
-                            var isInContainer = _notificationApps.Values[platNotif.AppInfo.PackageFamilyName];
+                            StorageFile notificationApps =
+                                await _localFolder.CreateFileAsync("notificationApps",
+                                    CreationCollisionOption.OpenIfExists);
 
-                            if (isInContainer == null)
+                            var notificationApp = new NotificationApp
                             {
-                                var app = new ApplicationDataCompositeValue
-                                {
-                                    ["name"] = platNotif.AppInfo.DisplayInfo.DisplayName,
-                                    ["value"] = true
-                                };
-
-                                _notificationApps.Values[platNotif.AppInfo.PackageFamilyName] = app;
-                            }
+                                Key = platNotif.AppInfo.PackageFamilyName,
+                                Name = platNotif.AppInfo.DisplayInfo.DisplayName,
+                                Value = true
+                            };
+                            var icon = platNotif.AppInfo.DisplayInfo.GetLogo(new Size(16, 16));
+                            var data = await notificationApp.Serialize(icon);
+                            await FileIO.WriteBytesAsync(notificationApps, data);
                         }
 
                         if (platNotif.AppInfo.PackageFamilyName != _packageFamilyName &&
@@ -316,6 +326,21 @@ namespace Win10Notifications
                 Error = "Error updating notifications: " + ex;
             }
 
+        }
+
+        private async Task ReadNotificationApps()
+        {
+            try
+            {
+                var notificationApps = await _localFolder.GetFileAsync("notificationApps");
+                var data = await FileIO.ReadBufferAsync(notificationApps);
+                var notificationApp = await NotificationApp.Deserialize(data.ToArray());
+                NotificationApps.Add(notificationApp);
+            }
+            catch (Exception)
+            {
+                // ignored
+            }
         }
 
         private async void CreateFile()
@@ -425,7 +450,7 @@ namespace Win10Notifications
         private async void InitializeRadios()
         {
             // RequestAccessAsync must be called at least once from the UI thread
-            var accessLevel = await Radio.RequestAccessAsync();
+            var accessLevel = await Windows.Devices.Radios.Radio.RequestAccessAsync();
             switch (accessLevel)
             {
                 case RadioAccessStatus.DeniedByUser:
@@ -436,12 +461,12 @@ namespace Win10Notifications
 
             // An alternative to Radio.GetRadiosAsync is to use the Windows.Devices.Enumeration pattern,
             // passing Radio.GetDeviceSelector as the AQS string
-            var radios = await Radio.GetRadiosAsync();
+            var radios = await Windows.Devices.Radios.Radio.GetRadiosAsync();
             foreach (var radio in radios)
             {
                 if (radio.Name == "Bluetooth")
                 {
-                    _bluetooth = new RadioModel(radio, this);
+                    _bluetooth = new Radio(radio, this);
                     BluetoothSwitchList.Items.Add(_bluetooth);
                     if (radio.State == RadioState.Disabled || radio.State == RadioState.Off)
                     {

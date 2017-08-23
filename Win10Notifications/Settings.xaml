@@ -6,6 +6,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:controls="using:Win10Notifications.Controls"
+    xmlns:models="using:Win10Notifications.Models"
     mc:Ignorable="d">
 
     <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
@@ -35,7 +36,29 @@
                 <ToggleSwitch Name="SendNotifications" Grid.Row="0" Grid.Column="1" Toggled="SendNotifications_Toggled"/>
                 <TextBlock Grid.Row="1" Grid.Column="0" Text="Apps:" HorizontalAlignment="Right" Margin="0,0,10,0"/>
                 <ListView x:Name="ListViewNotificationApps"
-                          Grid.Row="1" Grid.Column="1">
+                          Grid.Row="1" Grid.Column="1"
+                          SelectionMode="None">
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="models:NotificationApp">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Background="{ThemeResource SystemControlBackgroundAccentBrush}" Width="32" Height="32" Margin="0,0,10,0">
+                                    <Image Source="{x:Bind Icon}"/>
+                                </Border>
+                                <TextBlock Grid.Column="1" Text="{x:Bind Name}" VerticalAlignment="Center"/>
+                                <ToggleSwitch Grid.Column="2" IsOn="{x:Bind Value}" HorizontalAlignment="Right"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        </Style>
+                    </ListView.ItemContainerStyle>
                 </ListView>
             </Grid>
         </Grid>

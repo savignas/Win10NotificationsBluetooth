@@ -100,8 +100,9 @@
     <Compile Include="MainPage.xaml.cs">
       <DependentUpon>MainPage.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Models\NotificationApp.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="RadioModel.cs" />
+    <Compile Include="Models\Radio.cs" />
     <Compile Include="RfcommConfiguration.cs" />
     <Compile Include="Settings.xaml.cs">
       <DependentUpon>Settings.xaml</DependentUpon>
