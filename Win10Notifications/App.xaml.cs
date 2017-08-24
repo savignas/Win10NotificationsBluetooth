@@ -7,6 +7,7 @@ using Windows.ApplicationModel;
 using Windows.ApplicationModel.Activation;
 using Windows.Foundation;
 using Windows.Foundation.Collections;
+using Windows.Storage;
 using Windows.Storage.Streams;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
@@ -24,6 +25,9 @@ namespace Win10Notifications
     /// </summary>
     sealed partial class App : Application
     {
+        private readonly StorageFolder _localFolder =
+            ApplicationData.Current.LocalFolder;
+
         /// <summary>
         /// Initializes the singleton application object.  This is the first line of authored code
         /// executed, and as such is the logical equivalent of main() or WinMain().
@@ -39,8 +43,17 @@ namespace Win10Notifications
         /// will be used such as when the application is launched to open a specific file.
         /// </summary>
         /// <param name="e">Details about the launch request and process.</param>
-        protected override void OnLaunched(LaunchActivatedEventArgs e)
+        protected override async void OnLaunched(LaunchActivatedEventArgs e)
         {
+            try
+            {
+                await _localFolder.CreateFileAsync("notificationApps", CreationCollisionOption.FailIfExists);
+            }
+            catch (Exception)
+            {
+                // ignored
+            }
+            
             ((Window.Current.Content as Frame)?.Content as MainPage)?.UpdateNotifications();
 #if DEBUG
             if (System.Diagnostics.Debugger.IsAttached)
@@ -109,13 +122,15 @@ namespace Win10Notifications
             deferral.Complete();
         }
 
-        protected override void OnBackgroundActivated(BackgroundActivatedEventArgs args)
+        protected override async void OnBackgroundActivated(BackgroundActivatedEventArgs args)
         {
             var deferral = args.TaskInstance.GetDeferral();
             switch (args.TaskInstance.Task.Name)
             {
                 case "UserNotificationChanged2":
-                    ((Window.Current.Content as Frame)?.Content as MainPage)?.UpdateNotifications();
+                    var updateNotifications = ((Window.Current.Content as Frame)?.Content as MainPage)?.UpdateNotifications();
+                    if (updateNotifications != null)
+                        await updateNotifications;
                     break;
             }
             deferral.Complete();

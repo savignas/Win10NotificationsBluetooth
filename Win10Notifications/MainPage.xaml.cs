@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
@@ -152,7 +153,7 @@ namespace Win10Notifications
             InitializeRfcommServerBg();
         }
 
-        private void ClearNotificationsButton_Click(object sender, RoutedEventArgs e)
+        private async void ClearNotificationsButton_Click(object sender, RoutedEventArgs e)
         {
             try
             {
@@ -164,10 +165,10 @@ namespace Win10Notifications
                 Error = "Failed to clear all norifications! Error: " + ex;
             }
 
-            UpdateNotifications();
+            await UpdateNotifications();
         }
 
-        private void InitializeNotificationListener()
+        private async void InitializeNotificationListener()
         {
             // Get the listener
             _listener = UserNotificationListener.Current;
@@ -188,10 +189,10 @@ namespace Win10Notifications
                 builder.Register();
             }
 
-            UpdateNotifications();
+            await UpdateNotifications();
         }
 
-        public async void UpdateNotifications()
+        public async Task UpdateNotifications()
         {
             try
             {
@@ -287,27 +288,43 @@ namespace Win10Notifications
                         // Insert at that position
                         Notifications.Insert(i, platNotif);
 
-                        await ReadNotificationApps();
+                        var oldData = await ReadNotificationApps();
 
-                        if (!NotificationApps.Any(x => x.Key == platNotif.AppInfo.PackageFamilyName))
+                        if (!NotificationApps.Any(x => x.Key == platNotif.AppInfo.AppUserModelId))
                         {
-                            StorageFile notificationApps =
-                                await _localFolder.CreateFileAsync("notificationApps",
-                                    CreationCollisionOption.OpenIfExists);
-
                             var notificationApp = new NotificationApp
                             {
-                                Key = platNotif.AppInfo.PackageFamilyName,
+                                Key = platNotif.AppInfo.AppUserModelId,
                                 Name = platNotif.AppInfo.DisplayInfo.DisplayName,
                                 Value = true
                             };
-                            var icon = platNotif.AppInfo.DisplayInfo.GetLogo(new Size(16, 16));
-                            var data = await notificationApp.Serialize(icon);
+                            var stream = Stream.Null;
+                            try
+                            {
+                                var icon = await platNotif.AppInfo.DisplayInfo.GetLogo(new Size(16, 16)).OpenReadAsync();
+                                stream = icon.AsStreamForRead();
+                            }
+                            catch (Exception)
+                            {
+                                // ignored
+                            }
+                            var buffer = new byte[stream.Length];
+                            await stream.ReadAsync(buffer, 0, buffer.Length);
+                            notificationApp.IconData = buffer;
+                            NotificationApps.Add(notificationApp);
+
+                            var newData = notificationApp.Serialize();
+
+                            var data = new byte[oldData.Length + newData.Length];
+                            System.Buffer.BlockCopy(oldData, 0, data, 0, oldData.Length);
+                            System.Buffer.BlockCopy(newData, 0, data, oldData.Length, newData.Length);
+
+                            var notificationApps = await _localFolder.GetFileAsync("notificationApps");
                             await FileIO.WriteBytesAsync(notificationApps, data);
                         }
 
                         if (platNotif.AppInfo.PackageFamilyName != _packageFamilyName &&
-                            _sendNotifications != null && (bool) _sendNotifications)
+                            _sendNotifications != null && (bool) _sendNotifications && NotificationApps.Any(x => x.Key == platNotif.AppInfo.AppUserModelId && x.Value))
                         {
                             if (DisconnectButton.IsEnabled)
                             {
@@ -328,19 +345,21 @@ namespace Win10Notifications
 
         }
 
-        private async Task ReadNotificationApps()
+        private async Task<byte[]> ReadNotificationApps()
         {
             try
             {
                 var notificationApps = await _localFolder.GetFileAsync("notificationApps");
                 var data = await FileIO.ReadBufferAsync(notificationApps);
-                var notificationApp = await NotificationApp.Deserialize(data.ToArray());
-                NotificationApps.Add(notificationApp);
+                var notificationAppList = await NotificationApp.Deserialize(data.ToArray());
+                NotificationApps = notificationAppList;
+                return data.ToArray();
             }
             catch (Exception)
             {
-                // ignored
+                return new byte[]{};
             }
+            
         }
 
         private async void CreateFile()
@@ -390,7 +409,7 @@ namespace Win10Notifications
             return -1;
         }
 
-        public void RemoveNotification(uint notifId)
+        public async void RemoveNotification(uint notifId)
         {
             try
             {
@@ -402,7 +421,7 @@ namespace Win10Notifications
                 ShowMessage(ex.ToString(), "Failed to dismiss notification");
             }
 
-            UpdateNotifications();
+            await UpdateNotifications();
         }
 
         public void ShowNotification(string title, string content, string key)
@@ -755,7 +774,7 @@ namespace Win10Notifications
                     _writer.WriteString(notifMessage);
 
                     ConversationListBox.Items.Add("Sent: " + notifMessage);
-                    WriteFile("Sent: " + notifMessage);
+                    //WriteFile("Sent: " + notifMessage);
 
                     await _writer.StoreAsync();
                 }
@@ -778,7 +797,7 @@ namespace Win10Notifications
                     _writer.WriteString(notifMessage);
 
                     ConversationListBox.Items.Add("Sent: " + notifMessage);
-                    WriteFile("Sent: " + notifMessage);
+                    //WriteFile("Sent: " + notifMessage);
 
                     await _writer.StoreAsync();
                 }
@@ -804,7 +823,7 @@ namespace Win10Notifications
                     ApplicationData.Current.LocalSettings.Values["SendMessage"] = notifMessage;
 
                     ConversationListBox.Items.Add("Sent: " + notifMessage);
-                    WriteFile("Sent: " + notifMessage);
+                    //WriteFile("Sent: " + notifMessage);
                 }
                 else
                 {
@@ -1035,9 +1054,9 @@ namespace Win10Notifications
                     await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
                     {
                         NotifyUser("Client Connected: " + remoteDeviceName, NotifyType.StatusMessage);
-                        CreateFile();
+                        //CreateFile();
                         ConversationListBox.Items.Add("Received: " + backgroundMessage);
-                        WriteFile("Received: " + backgroundMessage);
+                        //WriteFile("Received: " + backgroundMessage);
                         RemoveNotification(UInt32.Parse(backgroundMessage));
                         SendNotificationsOnConnectBg();
                     });
@@ -1117,7 +1136,7 @@ namespace Win10Notifications
             {
                 NotifyUser("Connected to Client: " + remoteDevice.Name, NotifyType.StatusMessage);
                 DisconnectButton.Content = "Disconnect from " + remoteDevice.Name;
-                CreateFile();
+                //CreateFile();
                 if (_sendNotifications != null && (bool) _sendNotifications)
                 {
                     SendNotificationsOnConnect();
@@ -1154,7 +1173,7 @@ namespace Win10Notifications
                     await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
                     {
                         ConversationListBox.Items.Add("Received: " + message);
-                        WriteFile("Received: " + message);
+                        //WriteFile("Received: " + message);
                         var messageParts = message.Split(';');
 
                         switch (messageParts[0])

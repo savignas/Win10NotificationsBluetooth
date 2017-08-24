@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
+using System.Threading.Tasks;
 using Windows.Foundation;
 using Windows.Foundation.Collections;
 using Windows.Storage;
+using Windows.UI;
 using Windows.UI.Core;
 using Windows.UI.Notifications.Management;
 using Windows.UI.Popups;
@@ -35,7 +37,7 @@ namespace Win10Notifications
         private readonly StorageFolder _localFolder =
             ApplicationData.Current.LocalFolder;
 
-        List<NotificationApp> NotificationApps = new List<NotificationApp>();
+        private List<NotificationApp> _notificationApps = new List<NotificationApp>();
 
         public Settings()
         {
@@ -50,7 +52,7 @@ namespace Win10Notifications
         {
             var rootFrame = Window.Current.Content as Frame;
 
-            if (rootFrame.CanGoBack)
+            if (rootFrame != null && rootFrame.CanGoBack)
             {
                 // Show UI in title bar if opted-in and in-app backstack is not empty.
                 SystemNavigationManager.GetForCurrentView().AppViewBackButtonVisibility =
@@ -80,10 +82,9 @@ namespace Win10Notifications
             {
                 var notificationApps = await _localFolder.GetFileAsync("notificationApps");
                 var data = await FileIO.ReadBufferAsync(notificationApps);
-                var notificationApp = await NotificationApp.Deserialize(data.ToArray());
-                NotificationApps.Add(notificationApp);
+                _notificationApps = await NotificationApp.Deserialize(data.ToArray());
 
-                ListViewNotificationApps.ItemsSource = NotificationApps;
+                ListViewNotificationApps.ItemsSource = _notificationApps;
             }
             catch (Exception)
             {
@@ -135,8 +136,19 @@ namespace Win10Notifications
             }
         }
 
-        private void GoBack()
+        private async void GoBack()
         {
+            var data = new List<byte>();
+            foreach (var notificationApp in _notificationApps)
+            {
+                if (notificationApp.Delete) continue;
+                var appData = notificationApp.Serialize();
+                data.AddRange(appData);
+            }
+
+            var notificationApps = await _localFolder.GetFileAsync("notificationApps");
+            await FileIO.WriteBytesAsync(notificationApps, data.ToArray());
+
             Frame rootFrame = Window.Current.Content as Frame;
             if (rootFrame == null)
                 return;
@@ -175,6 +187,44 @@ namespace Win10Notifications
             {
                 _localSettings.Values["sendNotifications"] = false;
                 SendNotifications.IsEnabled = true;
+            }
+        }
+
+        private void DeleteButton_Click(object sender, RoutedEventArgs e)
+        {
+            var frameworkElement = sender as FrameworkElement;
+            var button = sender as ToggleButton;
+            if (!(frameworkElement?.Tag is NotificationApp app) || !(frameworkElement.Parent is Grid parent)) return;
+            if (button?.IsChecked != null && (bool) button.IsChecked)
+            {
+                app.Delete = true;
+                parent.Background = new SolidColorBrush(Colors.Red);
+            }
+            else
+            {
+                app.Delete = false;
+                parent.Background = new SolidColorBrush(Colors.Transparent);
+            }
+        }
+
+        private void DeleteAllButton_Click(object sender, RoutedEventArgs e)
+        {
+            var button = sender as ToggleButton;
+            if (button?.IsChecked != null && (bool) button.IsChecked)
+            {
+                foreach (var notificationApp in _notificationApps)
+                {
+                    notificationApp.Delete = true;
+                }
+                ListViewNotificationApps.Background = new SolidColorBrush(Colors.Red);
+            }
+            else
+            {
+                foreach (var notificationApp in _notificationApps)
+                {
+                    notificationApp.Delete = false;
+                }
+                ListViewNotificationApps.Background = new SolidColorBrush(Colors.Transparent);
             }
         }
     }
