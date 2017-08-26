@@ -1,11 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
-using System.Threading.Tasks;
-using Windows.Foundation;
-using Windows.Foundation.Collections;
 using Windows.Storage;
 using Windows.UI;
 using Windows.UI.Core;
@@ -14,7 +9,6 @@ using Windows.UI.Popups;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Controls.Primitives;
-using Windows.UI.Xaml.Data;
 using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Navigation;
@@ -27,7 +21,7 @@ namespace Win10Notifications
     /// <summary>
     /// An empty page that can be used on its own or navigated to within a Frame.
     /// </summary>
-    public sealed partial class Settings : Page
+    public sealed partial class Settings
     {
         private UserNotificationListener _listener;
 
@@ -41,7 +35,7 @@ namespace Win10Notifications
 
         public Settings()
         {
-            this.InitializeComponent();
+            InitializeComponent();
             SetSendNotificationsToggle();
             ReadNotificationApps();
 
@@ -50,9 +44,7 @@ namespace Win10Notifications
 
         protected override void OnNavigatedTo(NavigationEventArgs e)
         {
-            var rootFrame = Window.Current.Content as Frame;
-
-            if (rootFrame != null && rootFrame.CanGoBack)
+            if (Window.Current.Content is Frame rootFrame && rootFrame.CanGoBack)
             {
                 // Show UI in title bar if opted-in and in-app backstack is not empty.
                 SystemNavigationManager.GetForCurrentView().AppViewBackButtonVisibility =
@@ -181,7 +173,7 @@ namespace Win10Notifications
             SendNotifications.IsEnabled = false;
             if (SendNotifications.IsOn)
             {
-                this.InitializeNotificationListener();
+                InitializeNotificationListener();
             }
             else
             {
