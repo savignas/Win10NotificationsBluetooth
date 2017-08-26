@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using Windows.ApplicationModel.Background;
@@ -11,7 +12,13 @@ using Windows.Devices.Bluetooth;
 using Windows.UI.Notifications;
 using Windows.UI.Notifications.Management;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices.WindowsRuntime;
+using Windows.ApplicationModel;
+using Windows.Foundation;
+using Windows.UI.Xaml.Media.Imaging;
+using Tasks.Models;
 
 namespace Tasks
 {
@@ -19,20 +26,35 @@ namespace Tasks
     public sealed class RfcommServerTask : IBackgroundTask
     {
         // Networking
-        private StreamSocket socket = null;
-        private DataReader reader = null;
-        private DataWriter writer = null;
-        private BluetoothDevice remoteDevice = null;
+        private StreamSocket _socket;
+        private DataReader _reader;
+        private DataWriter _writer;
+        private BluetoothDevice _remoteDevice;
 
         private static UserNotificationListener _listener;
         private static ObservableCollection<UserNotification> Notifications { get; } = new ObservableCollection<UserNotification>();
 
-        private BackgroundTaskDeferral deferral = null;
-        private IBackgroundTaskInstance taskInstance = null;
-        private BackgroundTaskCancellationReason cancelReason = BackgroundTaskCancellationReason.Abort;
-        private bool cancelRequested = false;
+        private BackgroundTaskDeferral _deferral;
+        private IBackgroundTaskInstance _taskInstance;
+        private BackgroundTaskCancellationReason _cancelReason = BackgroundTaskCancellationReason.Abort;
+        private bool _cancelRequested;
 
-        ThreadPoolTimer periodicTimer = null;
+        ThreadPoolTimer _periodicTimer;
+
+        private static readonly string PackageFamilyName = Package.Current.Id.FamilyName;
+
+        private static object _sendNotifications;
+
+        private static readonly ApplicationDataContainer LocalSettings =
+            ApplicationData.Current.LocalSettings;
+
+        private readonly StorageFolder _localFolder =
+            ApplicationData.Current.LocalFolder;
+
+        private static List<NotificationApp> _notificationApps = new List<NotificationApp>();
+
+        private static StorageFile _notificationAppsFile;
+        /// <inheritdoc />
         /// <summary>
         /// The entry point of a background task.
         /// </summary>
@@ -40,46 +62,48 @@ namespace Tasks
         public async void Run(IBackgroundTaskInstance taskInstance)
         {
             // Get the deferral to prevent the task from closing prematurely
-            deferral = taskInstance.GetDeferral();
+            _deferral = taskInstance.GetDeferral();
 
             // Setup our onCanceled callback and progress
-            this.taskInstance = taskInstance;
-            this.taskInstance.Canceled += new BackgroundTaskCanceledEventHandler(OnCanceled);
-            this.taskInstance.Progress = 0;
+            _taskInstance = taskInstance;
+            _taskInstance.Canceled += OnCanceled;
+            _taskInstance.Progress = 0;
 
             // Store a setting so that the app knows that the task is running. 
             ApplicationData.Current.LocalSettings.Values["IsBackgroundTaskActive"] = true;
 
-            periodicTimer = ThreadPoolTimer.CreatePeriodicTimer(new TimerElapsedHandler(PeriodicTimerCallback), TimeSpan.FromSeconds(1));
+            _periodicTimer = ThreadPoolTimer.CreatePeriodicTimer(PeriodicTimerCallback, TimeSpan.FromSeconds(1));
 
             _listener = UserNotificationListener.Current;
 
+            _notificationAppsFile = await _localFolder.GetFileAsync("notificationApps");
+
             try
             {
-                RfcommConnectionTriggerDetails details = (RfcommConnectionTriggerDetails)taskInstance.TriggerDetails;
+                var details = (RfcommConnectionTriggerDetails)taskInstance.TriggerDetails;
                 if (details != null)
                 {
-                    socket = details.Socket;
-                    remoteDevice = details.RemoteDevice;
-                    ApplicationData.Current.LocalSettings.Values["RemoteDeviceName"] = remoteDevice.Name;
+                    _socket = details.Socket;
+                    _remoteDevice = details.RemoteDevice;
+                    ApplicationData.Current.LocalSettings.Values["RemoteDeviceName"] = _remoteDevice.Name;
 
-                    writer = new DataWriter(socket.OutputStream);
-                    reader = new DataReader(socket.InputStream);
+                    _writer = new DataWriter(_socket.OutputStream);
+                    _reader = new DataReader(_socket.InputStream);
                 }
                 else
                 {
                     ApplicationData.Current.LocalSettings.Values["BackgroundTaskStatus"] = "Trigger details returned null";
-                    deferral.Complete();
+                    _deferral.Complete();
                 }
 
-                var result = await ReceiveDataAsync();
+                await ReceiveDataAsync();
             }
             catch (Exception ex)
             {
-                reader = null;
-                writer = null;
-                socket = null;
-                deferral.Complete();
+                _reader = null;
+                _writer = null;
+                _socket = null;
+                _deferral.Complete();
 
                 Debug.WriteLine("Exception occurred while initializing the connection, hr = " + ex.HResult.ToString("X"));
             }
@@ -87,41 +111,41 @@ namespace Tasks
 
         private void OnCanceled(IBackgroundTaskInstance taskInstance, BackgroundTaskCancellationReason reason)
         {
-            cancelReason = reason;
-            cancelRequested = true;
+            _cancelReason = reason;
+            _cancelRequested = true;
 
-            ApplicationData.Current.LocalSettings.Values["TaskCancelationReason"] = cancelReason.ToString();
+            ApplicationData.Current.LocalSettings.Values["TaskCancelationReason"] = _cancelReason.ToString();
             ApplicationData.Current.LocalSettings.Values["IsBackgroundTaskActive"] = false;
             ApplicationData.Current.LocalSettings.Values["ReceivedMessage"] = "";
             // Complete the background task (this raises the OnCompleted event on the corresponding BackgroundTaskRegistration). 
-            deferral.Complete();
+            _deferral.Complete();
         }
 
         private async Task<int> ReceiveDataAsync()
         {
             while (true)
             {
-                var readLength = await reader.LoadAsync(sizeof(byte));
+                var readLength = await _reader.LoadAsync(sizeof(byte));
                 if (readLength < sizeof(byte))
                 {
                     ApplicationData.Current.LocalSettings.Values["IsBackgroundTaskActive"] = false;
                     // Complete the background task (this raises the OnCompleted event on the corresponding BackgroundTaskRegistration). 
-                    deferral.Complete();
+                    _deferral.Complete();
                 }
-                var currentLength = reader.ReadByte();
+                var currentLength = _reader.ReadByte();
 
-                readLength = await reader.LoadAsync(currentLength);
+                readLength = await _reader.LoadAsync(currentLength);
                 if (readLength < currentLength)
                 {
                     ApplicationData.Current.LocalSettings.Values["IsBackgroundTaskActive"] = false;
                     // Complete the background task (this raises the OnCompleted event on the corresponding BackgroundTaskRegistration). 
-                    deferral.Complete();
+                    _deferral.Complete();
                 }
-                string message = reader.ReadString(currentLength);
+                var message = _reader.ReadString(currentLength);
 
                 ApplicationData.Current.LocalSettings.Values["ReceivedMessage"] = message;
                 RemoveNotification(UInt32.Parse(message));
-                taskInstance.Progress += 1;
+                _taskInstance.Progress += 1;
             }
         }
 
@@ -132,44 +156,42 @@ namespace Tasks
         
         private async void PeriodicTimerCallback(ThreadPoolTimer timer)
         {
-            if (!cancelRequested)
+            if (!_cancelRequested)
             {
-                string message = (string)ApplicationData.Current.LocalSettings.Values["SendMessage"];
-                if (!string.IsNullOrEmpty(message))
+                var message = (string)ApplicationData.Current.LocalSettings.Values["SendMessage"];
+                if (string.IsNullOrEmpty(message)) return;
+                try
                 {
-                    try
+                    // Make sure that the connection is still up and there is a message to send
+                    if (_socket != null)
                     {
-                        // Make sure that the connection is still up and there is a message to send
-                        if (socket != null)
-                        {
-                            //writer.WriteUInt32((uint)message.Length);
-                            writer.WriteString(message);
-                            await writer.StoreAsync();
+                        //writer.WriteUInt32((uint)message.Length);
+                        _writer.WriteString(message);
+                        await _writer.StoreAsync();
 
-                            ApplicationData.Current.LocalSettings.Values["SendMessage"] = null;
-                        }
-                        else
-                        {
-                            cancelReason = BackgroundTaskCancellationReason.ConditionLoss;
-                            deferral.Complete();
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        ApplicationData.Current.LocalSettings.Values["TaskCancelationReason"] = ex.Message;
                         ApplicationData.Current.LocalSettings.Values["SendMessage"] = null;
-                        deferral.Complete();
                     }
+                    else
+                    {
+                        _cancelReason = BackgroundTaskCancellationReason.ConditionLoss;
+                        _deferral.Complete();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    ApplicationData.Current.LocalSettings.Values["TaskCancelationReason"] = ex.Message;
+                    ApplicationData.Current.LocalSettings.Values["SendMessage"] = null;
+                    _deferral.Complete();
                 }
             }
             else
             {
                 // Timer clean up
-                periodicTimer.Cancel();
+                _periodicTimer.Cancel();
                 //
                 // Write to LocalSettings to indicate that this background task ran.
                 //
-                ApplicationData.Current.LocalSettings.Values["TaskCancelationReason"] = cancelReason.ToString();
+                ApplicationData.Current.LocalSettings.Values["TaskCancelationReason"] = _cancelReason.ToString();
             }
         }
 
@@ -177,6 +199,8 @@ namespace Tasks
         {
             try
             {
+                _sendNotifications = LocalSettings.Values["sendNotifications"];
+
                 // Get the toast notifications
                 var notifsInPlatform = await _listener.GetNotificationsAsync(NotificationKinds.Toast);
 
@@ -234,14 +258,112 @@ namespace Tasks
                         // Insert at that position
                         Notifications.Insert(i, platNotif);
 
-                        if ((bool)ApplicationData.Current.LocalSettings.Values["IsBackgroundTaskActive"])
+                        var oldData = await ReadNotificationApps();
+
+                        if (!_notificationApps.Any(x => x.Key == platNotif.AppInfo.AppUserModelId))
+                        {
+                            var notificationApp = new NotificationApp
+                            {
+                                Key = platNotif.AppInfo.AppUserModelId,
+                                Name = platNotif.AppInfo.DisplayInfo.DisplayName,
+                                Allowed = true
+                            };
+                            var stream = Stream.Null;
+                            try
+                            {
+                                var icon = await platNotif.AppInfo.DisplayInfo.GetLogo(new Size(16, 16)).OpenReadAsync();
+                                stream = icon.AsStreamForRead();
+                            }
+                            catch (Exception)
+                            {
+                                // ignored
+                            }
+                            var buffer = new byte[stream.Length];
+                            await stream.ReadAsync(buffer, 0, buffer.Length);
+                            notificationApp.IconData = buffer;
+                            _notificationApps.Add(notificationApp);
+
+                            var newData = notificationApp.Serialize();
+
+                            var data = new byte[oldData.Length + newData.Length];
+                            System.Buffer.BlockCopy(oldData, 0, data, 0, oldData.Length);
+                            System.Buffer.BlockCopy(newData, 0, data, oldData.Length, newData.Length);
+
+                            await FileIO.WriteBytesAsync(_notificationAppsFile, data);
+                        }
+
+                        if ((bool)ApplicationData.Current.LocalSettings.Values["IsBackgroundTaskActive"] && platNotif.AppInfo.PackageFamilyName != PackageFamilyName &&
+                            _sendNotifications != null && (bool)_sendNotifications && _notificationApps.Any(x => x.Key == platNotif.AppInfo.AppUserModelId && x.Allowed))
                         {
                             SendMessageBg("1", platNotif);
                         }
                     }
                 }
             }
-            catch (Exception) { }
+            catch (Exception)
+            {
+                // ignored
+            }
+        }
+
+        private static async Task<byte[]> ReadNotificationApps()
+        {
+            try
+            {
+                var data = await FileIO.ReadBufferAsync(_notificationAppsFile);
+                var notificationAppList = await Deserialize(data.ToArray());
+                _notificationApps = notificationAppList;
+                return data.ToArray();
+            }
+            catch (Exception)
+            {
+                return new byte[] { };
+            }
+
+        }
+
+        private static async Task<List<NotificationApp>> Deserialize([ReadOnlyArray] byte[] data)
+        {
+            using (var m = new MemoryStream(data))
+            {
+                using (var reader = new BinaryReader(m))
+                {
+                    var notificationApps = new List<NotificationApp>();
+
+                    while (true)
+                    {
+                        try
+                        {
+                            var notificationApp = new NotificationApp
+                            {
+                                Key = reader.ReadString(),
+                                Name = reader.ReadString(),
+                                Allowed = reader.ReadBoolean()
+                            };
+
+                            var iconLenght = reader.ReadInt32();
+                            if (iconLenght != 0)
+                            {
+                                var buffer = reader.ReadBytes(iconLenght);
+                                notificationApp.IconData = buffer;
+                                var stream = new MemoryStream(buffer).AsRandomAccessStream();
+                                var icon = new BitmapImage();
+                                await icon.SetSourceAsync(stream);
+
+                                notificationApp.Icon = icon;
+                            }
+
+                            notificationApps.Add(notificationApp);
+                        }
+                        catch (Exception)
+                        {
+                            break;
+                        }
+                    }
+
+                    return notificationApps;
+                }
+            }
         }
 
         private static int FindIndexOfNotification(uint notifId)
@@ -262,7 +384,10 @@ namespace Tasks
                 _listener.RemoveNotification(notifId);
             }
 
-            catch (Exception) { }
+            catch (Exception)
+            {
+                // ignored
+            }
 
             UpdateNotifications();
         }
@@ -274,7 +399,7 @@ namespace Tasks
                 // Get the toast binding, if present
                 var toastBinding = notification.Notification.Visual.GetBinding(KnownNotificationBindings.ToastGeneric);
                 var id = notification.Id;
-                var notifMessage = "";
+                string notifMessage;
 
                 if (type == "1")
                 {
@@ -288,7 +413,10 @@ namespace Tasks
                         {
                             appName = notification.AppInfo.DisplayInfo.DisplayName;
                         }
-                        catch (Exception) { }
+                        catch (Exception)
+                        {
+                            // ignored
+                        }
 
                         // And then get the text elements from the toast binding
                         var textElements = toastBinding.GetTextElements();
@@ -311,7 +439,7 @@ namespace Tasks
                 var previousMessage = (string)ApplicationData.Current.LocalSettings.Values["SendMessage"];
 
                 // Make sure previous message has been sent
-                if (previousMessage == null || previousMessage == "")
+                if (string.IsNullOrEmpty(previousMessage))
                 {
                     // Save the current message to local settings so the background task can pick it up. 
                     ApplicationData.Current.LocalSettings.Values["SendMessage"] = notifMessage;
