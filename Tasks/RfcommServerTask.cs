@@ -17,7 +17,9 @@ using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Windows.ApplicationModel;
 using Windows.Foundation;
+using Windows.UI.Core;
 using Windows.UI.Xaml.Media.Imaging;
+using Microsoft.Toolkit.Uwp.Notifications;
 using Tasks.Models;
 
 namespace Tasks
@@ -121,6 +123,35 @@ namespace Tasks
             _deferral.Complete();
         }
 
+        public void ShowNotification(string title, string content, string key)
+        {
+            var visual = new ToastVisual
+            {
+                BindingGeneric = new ToastBindingGeneric
+                {
+                    Children =
+                    {
+                        new AdaptiveText
+                        {
+                            Text = title
+                        },
+                        new AdaptiveText
+                        {
+                            Text = content
+                        }
+                    }
+                }
+            };
+            var toastContent = new ToastContent
+            {
+                Visual = visual
+            };
+
+            var toast = new ToastNotification(toastContent.GetXml()) { Tag = key };
+            ToastNotificationManager.CreateToastNotifier().Show(toast);
+            //AndroidNotifications.Add(toast);
+        }
+
         private async Task<int> ReceiveDataAsync()
         {
             while (true)
@@ -143,8 +174,26 @@ namespace Tasks
                 }
                 var message = _reader.ReadString(currentLength);
 
+                var messageParts = message.Split(';');
+
+                if (messageParts[0] == "0")
+                {
+                    try
+                    {
+                        RemoveNotification(uint.Parse(messageParts[1]));
+                    }
+                    catch (Exception)
+                    {
+                        ToastNotificationManager.History.Remove(messageParts[1]);
+                    }
+                }
+                else if (messageParts[0] == "1")
+                {
+                    ShowNotification(messageParts[2], messageParts[3], messageParts[1]);
+                }
+
                 ApplicationData.Current.LocalSettings.Values["ReceivedMessage"] = message;
-                RemoveNotification(UInt32.Parse(message));
+                RemoveNotification(uint.Parse(message));
                 _taskInstance.Progress += 1;
             }
         }
@@ -311,7 +360,7 @@ namespace Tasks
             try
             {
                 var data = await FileIO.ReadBufferAsync(_notificationAppsFile);
-                var notificationAppList = await Deserialize(data.ToArray());
+                var notificationAppList = Deserialize(data.ToArray());
                 _notificationApps = notificationAppList;
                 return data.ToArray();
             }
@@ -322,7 +371,7 @@ namespace Tasks
 
         }
 
-        private static async Task<List<NotificationApp>> Deserialize([ReadOnlyArray] byte[] data)
+        private static List<NotificationApp> Deserialize([ReadOnlyArray] byte[] data)
         {
             using (var m = new MemoryStream(data))
             {
@@ -346,11 +395,6 @@ namespace Tasks
                             {
                                 var buffer = reader.ReadBytes(iconLenght);
                                 notificationApp.IconData = buffer;
-                                var stream = new MemoryStream(buffer).AsRandomAccessStream();
-                                var icon = new BitmapImage();
-                                await icon.SetSourceAsync(stream);
-
-                                notificationApp.Icon = icon;
                             }
 
                             notificationApps.Add(notificationApp);

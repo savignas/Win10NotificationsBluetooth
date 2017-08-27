@@ -92,8 +92,7 @@
                 <AppBarButton Name="ListenButton" Icon="Play" Label="Start FG" Click="ListenButton_Click"/>
                 <AppBarButton x:Name="DisconnectButton" Icon="Stop" Label="Stop FG" Click="DisconnectButton_Click" IsEnabled="False"/>
                 <AppBarSeparator/>
-                <AppBarButton Name="ListenButtonBg" Icon="Play" Label="Start BG" Click="ListenButtonBg_Click"/>
-                <AppBarButton x:Name="DisconnectButtonBg" Icon="Stop" Label="Stop BG" Click="DisconnectButtonBg_Click" IsEnabled="False"/>
+                <AppBarButton x:Name="DisconnectButtonBg" Icon="Stop" Label="Stop BG" Click="DisconnectButtonBg_Click"/>
 
                 <CommandBar.SecondaryCommands>
                     <AppBarButton Name="SettingsButton" Icon="Setting" Label="Settings" Click="SettingsButton_Click" />

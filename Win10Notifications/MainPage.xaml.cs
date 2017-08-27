@@ -24,7 +24,6 @@ using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Navigation;
 using Microsoft.Toolkit.Uwp.Notifications;
 using Win10Notifications.Models;
-using Radio = Win10Notifications.Models.Radio;
 
 // The Blank Page item template is documented at http://go.microsoft.com/fwlink/?LinkId=402352&clcid=0x409
 
@@ -33,7 +32,7 @@ namespace Win10Notifications
     /// <summary>
     /// An empty page that can be used on its own or navigated to within a Frame.
     /// </summary>
-    public sealed partial class MainPage : Page
+    public sealed partial class MainPage
     {
         private UserNotificationListener _listener;
 
@@ -42,7 +41,7 @@ namespace Win10Notifications
         public ObservableCollection<UserNotification> Notifications { get; } = new ObservableCollection<UserNotification>();
         private ObservableCollection<ToastNotification> AndroidNotifications { get; } = new ObservableCollection<ToastNotification>();
 
-        private Radio _bluetooth;
+        private Models.Radio _bluetooth;
 
         private StreamSocket _socket;
         private DataWriter _writer;
@@ -64,8 +63,7 @@ namespace Win10Notifications
         private string notificationListenerTaskEntryPoint = "Tasks.NotificationListenerTask";
 
         // Define the raw bytes that are converted into SDP record
-        private readonly byte[] _sdpRecordBlob = new byte[]
-        {
+        private readonly byte[] _sdpRecordBlob = {
             0x35, 0x4a,  // DES len = 74 bytes
 
             // Vol 3 Part B 5.1.15 ServiceName
@@ -85,7 +83,6 @@ namespace Win10Notifications
                 0x43, 0x68, 0x61, 0x74, 0x20,                                   // Chat <sp>
                 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x20,                  // Service <sp>
                 0x69, 0x6e, 0x20, 0x43, 0x23                                    // in C#
-
         };
 
         private StorageFile _file;
@@ -106,10 +103,10 @@ namespace Win10Notifications
 
         public MainPage()
         {
-            this.InitializeComponent();
-            this.InitializeNotificationListener();
-            this.InitializeRadios();
-            this.OpenNotificationAppsFile();
+            InitializeComponent();
+            InitializeRadios();
+            InitializeNotificationListener();
+            OpenNotificationAppsFile();
 
             _trigger = new RfcommConnectionTrigger();
 
@@ -150,11 +147,6 @@ namespace Win10Notifications
             InitializeRfcommServer();
         }
 
-        private void ListenButtonBg_Click(object sender, RoutedEventArgs e)
-        {
-            InitializeRfcommServerBg();
-        }
-
         private async void ClearNotificationsButton_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -177,8 +169,47 @@ namespace Win10Notifications
 
         private async void InitializeNotificationListener()
         {
+            _sendNotifications = _localSettings.Values["sendNotifications"];
+            if (_sendNotifications == null || !(bool) _localSettings.Values["sendNotifications"]) return;
+
             // Get the listener
             _listener = UserNotificationListener.Current;
+
+            // And request access to the user's notifications (must be called from UI thread)
+            var accessStatus = await _listener.RequestAccessAsync();
+
+            switch (accessStatus)
+            {
+                // This means the user has granted access.
+                case UserNotificationListenerAccessStatus.Allowed:
+
+                    // Yay! Proceed as normal
+                    break;
+
+                // This means the user has denied access.
+                // Any further calls to RequestAccessAsync will instantly
+                // return Denied. The user must go to the Windows settings
+                // and manually allow access.
+                case UserNotificationListenerAccessStatus.Denied:
+
+                    _localSettings.Values["sendNotifications"] = false;
+                    // Show UI explaining that listener features will not
+                    // work until user allows access.
+                    var dialog = new MessageDialog("You need to turn on access to notifications in privacy settings!", "Error");
+                    dialog.Commands.Add(new UICommand { Label = "Close", Id = 0 });
+                    await dialog.ShowAsync();
+                    break;
+
+                // This means the user closed the prompt without
+                // selecting either allow or deny. Further calls to
+                // RequestAccessAsync will show the dialog again.
+                case UserNotificationListenerAccessStatus.Unspecified:
+
+                    // Show UI that allows the user to bring up the prompt again
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
 
             // If background task isn't registered yet
             if (!BackgroundTaskRegistration.AllTasks.Any(i => i.Value.Name.Equals("UserNotificationChanged2")))
@@ -203,8 +234,6 @@ namespace Win10Notifications
         {
             try
             {
-                _sendNotifications = _localSettings.Values["sendNotifications"];
-
                 // Get the toast notifications
                 var notifsInPlatform = await _listener.GetNotificationsAsync(NotificationKinds.Toast);
 
@@ -473,35 +502,62 @@ namespace Win10Notifications
 
         private async void InitializeRadios()
         {
-            // RequestAccessAsync must be called at least once from the UI thread
-            var accessLevel = await Windows.Devices.Radios.Radio.RequestAccessAsync();
-            switch (accessLevel)
-            {
-                case RadioAccessStatus.DeniedByUser:
-                    var dialog = new MessageDialog("You need to turn on access to radios in privacy settings!", "Error");
-                    await dialog.ShowAsync();
-                    break;
-                case RadioAccessStatus.Unspecified:
-                    break;
-                case RadioAccessStatus.Allowed:
-                    break;
-                case RadioAccessStatus.DeniedBySystem:
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
-
+            if (!(bool)_localSettings.Values["BgServer"]) return;
             // An alternative to Radio.GetRadiosAsync is to use the Windows.Devices.Enumeration pattern,
             // passing Radio.GetDeviceSelector as the AQS string
             var radios = await Windows.Devices.Radios.Radio.GetRadiosAsync();
-            foreach (var radio in radios)
+            try
             {
-                if (radio.Name != "Bluetooth") continue;
-                _bluetooth = new Radio(radio, this);
+                var bluetoothRadio = radios.Single(x => x.Kind == RadioKind.Bluetooth);
+                _bluetooth = new Models.Radio(bluetoothRadio, this);
                 BluetoothSwitchList.Items?.Add(_bluetooth);
-                if (radio.State != RadioState.Disabled && radio.State != RadioState.Off) continue;
-                ListenButton.IsEnabled = false;
-                ListenButtonBg.IsEnabled = false;
+                if (bluetoothRadio.State == RadioState.On)
+                {
+                    InitializeRfcommServerBg();
+                }
+                else
+                {
+                    ListenButton.IsEnabled = false;
+                    // RequestAccessAsync must be called at least once from the UI thread
+                    var accessLevel = await Windows.Devices.Radios.Radio.RequestAccessAsync();
+                    switch (accessLevel)
+                    {
+                        case RadioAccessStatus.DeniedByUser:
+                            var dialog = new MessageDialog("You need to turn on access to radios in privacy settings!", "Error");
+                            await dialog.ShowAsync();
+                            break;
+                        case RadioAccessStatus.Unspecified:
+                            break;
+                        case RadioAccessStatus.Allowed:
+                            var confimDialog = new MessageDialog("Can this app turn on your Bluetooth?", "Question");
+                            confimDialog.Commands.Add(new UICommand { Label = "No", Id = 0 });
+                            confimDialog.Commands.Add(new UICommand { Label = "Yes", Id = 1 });
+                            confimDialog.DefaultCommandIndex = 1;
+                            confimDialog.CancelCommandIndex = 0;
+                            var result = await confimDialog.ShowAsync();
+                            if ((int) result.Id == 1)
+                            {
+                                var enabled = await bluetoothRadio.SetStateAsync(RadioState.On);
+                                if (enabled == RadioAccessStatus.Allowed)
+                                {
+                                    InitializeRfcommServerBg();
+                                }
+                            }
+                            else
+                            {
+                                _localSettings.Values["BgServer"] = false;
+                            }
+                            break;
+                        case RadioAccessStatus.DeniedBySystem:
+                            break;
+                        default:
+                            throw new ArgumentOutOfRangeException();
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                NotifyUser("No Bluetooth detected!", NotifyType.ErrorMessage);
             }
         }
 
@@ -513,7 +569,6 @@ namespace Win10Notifications
         {
             ListenButton.IsEnabled = false;
             DisconnectButton.IsEnabled = true;
-            ListenButtonBg.IsEnabled = false;
             _bluetooth.IsEnabled = false;
 
             try
@@ -527,7 +582,6 @@ namespace Win10Notifications
                 NotifyUser("Make sure your Bluetooth Radio is on: " + ex.Message, NotifyType.ErrorMessage);
                 ListenButton.IsEnabled = true;
                 DisconnectButton.IsEnabled = false;
-                ListenButtonBg.IsEnabled = true;
                 _bluetooth.IsEnabled = true;
                 return;
             }
@@ -554,7 +608,6 @@ namespace Win10Notifications
                 NotifyUser(e.Message, NotifyType.ErrorMessage);
                 ListenButton.IsEnabled = true;
                 DisconnectButton.IsEnabled = false;
-                ListenButtonBg.IsEnabled = true;
                 _bluetooth.IsEnabled = true;
                 return;
             }
@@ -569,9 +622,6 @@ namespace Win10Notifications
         /// </summary>
         private async void InitializeRfcommServerBg()
         {
-            ListenButtonBg.IsEnabled = false;
-            DisconnectButtonBg.IsEnabled = true;
-            ListenButton.IsEnabled = false;
             _bluetooth.IsEnabled = false;
 
             // Registering a background trigger if it is not already registered. Rfcomm Chat Service will now be advertised in the SDP record
@@ -592,7 +642,7 @@ namespace Win10Notifications
             // Applications registering for background trigger must request for permission.
             var backgroundAccessStatus = await BackgroundExecutionManager.RequestAccessAsync();
 
-            var builder = new BackgroundTaskBuilder {TaskEntryPoint = taskEntryPoint};
+            var builder = new BackgroundTaskBuilder { TaskEntryPoint = taskEntryPoint };
             builder.SetTrigger(_trigger);
             builder.Name = TaskName;
 
@@ -636,7 +686,7 @@ namespace Win10Notifications
                 // Applications registering for background trigger must request for permission.
                 backgroundAccessStatus = await BackgroundExecutionManager.RequestAccessAsync();
 
-                builder = new BackgroundTaskBuilder {TaskEntryPoint = notificationListenerTaskEntryPoint};
+                builder = new BackgroundTaskBuilder { TaskEntryPoint = notificationListenerTaskEntryPoint };
                 builder.SetTrigger(new UserNotificationChangedTrigger(NotificationKinds.Toast));
                 builder.Name = NotificationListenerTaskName;
 
@@ -658,7 +708,7 @@ namespace Win10Notifications
                 catch (Exception)
                 {
                     NotifyUser("Notification listener not registered",
-                            NotifyType.ErrorMessage);
+                        NotifyType.ErrorMessage);
                 }
             }
         }
@@ -841,6 +891,7 @@ namespace Win10Notifications
 
         private void DisconnectButtonBg_Click(object sender, RoutedEventArgs e)
         {
+            _localSettings.Values["BgServer"] = false;
             DisconnectBgClick();
         } 
 
@@ -934,7 +985,6 @@ namespace Win10Notifications
             {
                 ListenButton.IsEnabled = true;
                 DisconnectButton.IsEnabled = false;
-                ListenButtonBg.IsEnabled = true;
                 _bluetooth.IsEnabled = true;
                 ConversationListBox.Items?.Clear();
             });
@@ -976,8 +1026,6 @@ namespace Win10Notifications
         {
             await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
             {
-                ListenButtonBg.IsEnabled = true;
-                DisconnectButtonBg.IsEnabled = false;
                 ListenButton.IsEnabled = true;
                 _bluetooth.IsEnabled = true;
                 ConversationListBox.Items?.Clear();
@@ -1013,7 +1061,7 @@ namespace Win10Notifications
 
         private async void DisconnectBg()
         {
-            await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
+            await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
             {
                 ConversationListBox.Items?.Clear();
 
@@ -1050,7 +1098,7 @@ namespace Win10Notifications
 
                 if (!backgroundMessage.Equals(""))
                 {
-                    await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
+                    await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                     {
                         NotifyUser("Client Connected: " + remoteDeviceName, NotifyType.StatusMessage);
                         //CreateFile();
@@ -1169,27 +1217,24 @@ namespace Win10Notifications
                     }
                     var message = reader.ReadString(currentLength);
 
-                    await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
+                    await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                     {
                         ConversationListBox.Items?.Add("Received: " + message);
                         //WriteFile("Received: " + message);
                         var messageParts = message.Split(';');
 
-                        switch (messageParts[0])
+                        if (messageParts[0] == "0")
+                            try
+                            {
+                                RemoveNotification(uint.Parse(messageParts[1]));
+                            }
+                            catch (Exception)
+                            {
+                                ToastNotificationManager.History.Remove(messageParts[1]);
+                            }
+                        else if (messageParts[0] == "1")
                         {
-                            case "0":
-                                try
-                                {
-                                    RemoveNotification(UInt32.Parse(messageParts[1]));
-                                }
-                                catch (Exception)
-                                {
-                                    ToastNotificationManager.History.Remove(messageParts[1]);
-                                }
-                                break;
-                            case "1":
-                                ShowNotification(messageParts[2], messageParts[3], messageParts[1]);
-                                break;
+                            ShowNotification(messageParts[2], messageParts[3], messageParts[1]);
                         }
                     });
                 }
@@ -1220,29 +1265,12 @@ namespace Win10Notifications
         private void Toggle_IsEnabledChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
             var bluetoothSwitch = (ToggleSwitch) sender;
-            if (bluetoothSwitch.IsEnabled)
-            {
-                if (_bluetooth.IsRadioOn == false)
-                {
-                    ListenButton.IsEnabled = false;
-                    ListenButtonBg.IsEnabled = false;
-                }
-                else
-                {
-                    ListenButton.IsEnabled = true;
-                    ListenButtonBg.IsEnabled = true;
-                }
-            }
-            else
-            {
-                ListenButton.IsEnabled = false;
-                ListenButtonBg.IsEnabled = false;
-            }
+            ListenButton.IsEnabled = bluetoothSwitch.IsEnabled && _bluetooth.IsRadioOn;
         }
 
         private void SettingsButton_Click(object sender, RoutedEventArgs e)
         {
-            this.Frame.Navigate(typeof(Settings));
+            Frame.Navigate(typeof(Settings));
         }
     }
 }

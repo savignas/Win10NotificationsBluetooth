@@ -4,8 +4,6 @@ using System.Runtime.InteropServices.WindowsRuntime;
 using Windows.Storage;
 using Windows.UI;
 using Windows.UI.Core;
-using Windows.UI.Notifications.Management;
-using Windows.UI.Popups;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Controls.Primitives;
@@ -23,8 +21,6 @@ namespace Win10Notifications
     /// </summary>
     public sealed partial class Settings
     {
-        private UserNotificationListener _listener;
-
         private readonly ApplicationDataContainer _localSettings =
             ApplicationData.Current.LocalSettings;
 
@@ -84,50 +80,6 @@ namespace Win10Notifications
             }
         }
 
-        private async void InitializeNotificationListener()
-        {
-            // Get the listener
-            _listener = UserNotificationListener.Current;
-
-            // And request access to the user's notifications (must be called from UI thread)
-            var accessStatus = await _listener.RequestAccessAsync();
-
-            switch (accessStatus)
-            {
-                // This means the user has granted access.
-                case UserNotificationListenerAccessStatus.Allowed:
-
-                    // Yay! Proceed as normal
-                    _localSettings.Values["sendNotifications"] = true;
-                    SendNotifications.IsEnabled = true;
-                    break;
-
-                // This means the user has denied access.
-                // Any further calls to RequestAccessAsync will instantly
-                // return Denied. The user must go to the Windows settings
-                // and manually allow access.
-                case UserNotificationListenerAccessStatus.Denied:
-
-                    SendNotifications.IsOn = false;
-                    _localSettings.Values["sendNotifications"] = false;
-                    SendNotifications.IsEnabled = true;
-                    // Show UI explaining that listener features will not
-                    // work until user allows access.
-                    var dialog = new MessageDialog("You need to turn on access to notifications in privacy settings!", "Error");
-                    dialog.Commands.Add(new UICommand { Label = "Close", Id = 0 });
-                    await dialog.ShowAsync();
-                    break;
-
-                // This means the user closed the prompt without
-                // selecting either allow or deny. Further calls to
-                // RequestAccessAsync will show the dialog again.
-                case UserNotificationListenerAccessStatus.Unspecified:
-
-                    // Show UI that allows the user to bring up the prompt again
-                    break;
-            }
-        }
-
         private async void GoBack()
         {
             var data = new List<byte>();
@@ -141,8 +93,7 @@ namespace Win10Notifications
             var notificationApps = await _localFolder.GetFileAsync("notificationApps");
             await FileIO.WriteBytesAsync(notificationApps, data.ToArray());
 
-            Frame rootFrame = Window.Current.Content as Frame;
-            if (rootFrame == null)
+            if (!(Window.Current.Content is Frame rootFrame))
                 return;
 
             // Navigate back if possible, and if the event has not 
@@ -170,16 +121,7 @@ namespace Win10Notifications
 
         private void SendNotifications_Toggled(object sender, RoutedEventArgs e)
         {
-            SendNotifications.IsEnabled = false;
-            if (SendNotifications.IsOn)
-            {
-                InitializeNotificationListener();
-            }
-            else
-            {
-                _localSettings.Values["sendNotifications"] = false;
-                SendNotifications.IsEnabled = true;
-            }
+            _localSettings.Values["sendNotifications"] = SendNotifications.IsOn;
         }
 
         private void DeleteButton_Click(object sender, RoutedEventArgs e)
