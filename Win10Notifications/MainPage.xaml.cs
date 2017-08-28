@@ -101,6 +101,8 @@ namespace Win10Notifications
 
         private StorageFile _notificationAppsFile;
 
+        private byte[] _oldData;
+
         public MainPage()
         {
             InitializeComponent();
@@ -165,6 +167,7 @@ namespace Win10Notifications
         private async void OpenNotificationAppsFile()
         {
             _notificationAppsFile = await _localFolder.GetFileAsync("notificationApps");
+            _oldData = await ReadNotificationApps();
         }
 
         private async void InitializeNotificationListener()
@@ -197,6 +200,7 @@ namespace Win10Notifications
                     // work until user allows access.
                     var dialog = new MessageDialog("You need to turn on access to notifications in privacy settings!", "Error");
                     dialog.Commands.Add(new UICommand { Label = "Close", Id = 0 });
+                    dialog.CancelCommandIndex = 0;
                     await dialog.ShowAsync();
                     break;
 
@@ -324,7 +328,12 @@ namespace Win10Notifications
                         // Insert at that position
                         Notifications.Insert(i, platNotif);
 
-                        var oldData = await ReadNotificationApps();
+                        if (_localSettings.Values["newSettings"] != null && (bool)_localSettings.Values["newSettings"])
+                        {
+                            _oldData = await ReadNotificationApps();
+                            _sendNotifications = _localSettings.Values["sendNotifications"];
+                            _localSettings.Values["newSettings"] = false;
+                        }
 
                         if (!_notificationApps.Any(x => x.Key == platNotif.AppInfo.AppUserModelId))
                         {
@@ -351,9 +360,9 @@ namespace Win10Notifications
 
                             var newData = notificationApp.Serialize();
 
-                            var data = new byte[oldData.Length + newData.Length];
-                            System.Buffer.BlockCopy(oldData, 0, data, 0, oldData.Length);
-                            System.Buffer.BlockCopy(newData, 0, data, oldData.Length, newData.Length);
+                            var data = new byte[_oldData.Length + newData.Length];
+                            System.Buffer.BlockCopy(_oldData, 0, data, 0, _oldData.Length);
+                            System.Buffer.BlockCopy(newData, 0, data, _oldData.Length, newData.Length);
 
                             await FileIO.WriteBytesAsync(_notificationAppsFile, data);
                         }

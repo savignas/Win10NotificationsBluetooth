@@ -1,9 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices.WindowsRuntime;
+using System.Threading.Tasks;
 using Windows.Storage;
 using Windows.UI;
 using Windows.UI.Core;
+using Windows.UI.Notifications.Management;
+using Windows.UI.Popups;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Controls.Primitives;
@@ -27,7 +30,15 @@ namespace Win10Notifications
         private readonly StorageFolder _localFolder =
             ApplicationData.Current.LocalFolder;
 
+        private UserNotificationListener _listener;
+
         private List<NotificationApp> _notificationApps = new List<NotificationApp>();
+
+        private bool _sendNotifications;
+
+        private int _itemsLoaded;
+
+        private bool _loaded;
 
         public Settings()
         {
@@ -52,7 +63,49 @@ namespace Win10Notifications
                 SystemNavigationManager.GetForCurrentView().AppViewBackButtonVisibility =
                     AppViewBackButtonVisibility.Collapsed;
             }
+        }
 
+        private async Task InitializeNotificationListener()
+        {
+            // Get the listener
+            _listener = UserNotificationListener.Current;
+
+            // And request access to the user's notifications (must be called from UI thread)
+            var accessStatus = await _listener.RequestAccessAsync();
+
+            switch (accessStatus)
+            {
+                // This means the user has granted access.
+                case UserNotificationListenerAccessStatus.Allowed:
+
+                    // Yay! Proceed as normal
+                    break;
+
+                // This means the user has denied access.
+                // Any further calls to RequestAccessAsync will instantly
+                // return Denied. The user must go to the Windows settings
+                // and manually allow access.
+                case UserNotificationListenerAccessStatus.Denied:
+
+                    _sendNotifications = false;
+                    // Show UI explaining that listener features will not
+                    // work until user allows access.
+                    var dialog = new MessageDialog("You need to turn on access to notifications in privacy settings!", "Error");
+                    dialog.Commands.Add(new UICommand { Label = "Close", Id = 0 });
+                    dialog.CancelCommandIndex = 0;
+                    await dialog.ShowAsync();
+                    break;
+
+                // This means the user closed the prompt without
+                // selecting either allow or deny. Further calls to
+                // RequestAccessAsync will show the dialog again.
+                case UserNotificationListenerAccessStatus.Unspecified:
+
+                    // Show UI that allows the user to bring up the prompt again
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
         }
 
         private void SetSendNotificationsToggle()
@@ -80,19 +133,8 @@ namespace Win10Notifications
             }
         }
 
-        private async void GoBack()
+        private static void GoBack()
         {
-            var data = new List<byte>();
-            foreach (var notificationApp in _notificationApps)
-            {
-                if (notificationApp.Delete) continue;
-                var appData = notificationApp.Serialize();
-                data.AddRange(appData);
-            }
-
-            var notificationApps = await _localFolder.GetFileAsync("notificationApps");
-            await FileIO.WriteBytesAsync(notificationApps, data.ToArray());
-
             if (!(Window.Current.Content is Frame rootFrame))
                 return;
 
@@ -104,14 +146,12 @@ namespace Win10Notifications
             }
         }
 
-        private void Settings_BackRequested(object sender,
+        private static void Settings_BackRequested(object sender,
             BackRequestedEventArgs e)
         {
-            if (e.Handled == false)
-            {
-                e.Handled = true;
-                GoBack();
-            }
+            if (e.Handled) return;
+            e.Handled = true;
+            GoBack();
         }
 
         private void Back_Tapped(object sender, TappedRoutedEventArgs e)
@@ -121,24 +161,28 @@ namespace Win10Notifications
 
         private void SendNotifications_Toggled(object sender, RoutedEventArgs e)
         {
-            _localSettings.Values["sendNotifications"] = SendNotifications.IsOn;
+            _sendNotifications = SendNotifications.IsOn;
+
+            if (_loaded)
+            {
+                SaveButton.Visibility = Visibility.Visible;
+            }
         }
 
         private void DeleteButton_Click(object sender, RoutedEventArgs e)
         {
             var frameworkElement = sender as FrameworkElement;
             var button = sender as ToggleButton;
-            if (!(frameworkElement?.Tag is NotificationApp app) || !(frameworkElement.Parent is Grid parent)) return;
+            if (!(frameworkElement?.Parent is Grid parent)) return;
             if (button?.IsChecked != null && (bool) button.IsChecked)
             {
-                app.Delete = true;
                 parent.Background = new SolidColorBrush(Colors.Red);
             }
             else
             {
-                app.Delete = false;
                 parent.Background = new SolidColorBrush(Colors.Transparent);
             }
+            SaveButton.Visibility = Visibility.Visible;
         }
 
         private void DeleteAllButton_Click(object sender, RoutedEventArgs e)
@@ -160,6 +204,52 @@ namespace Win10Notifications
                 }
                 ListViewNotificationApps.Background = new SolidColorBrush(Colors.Transparent);
             }
+            SaveButton.Visibility = Visibility.Visible;
+        }
+
+        private async void SaveButton_Click(object sender, RoutedEventArgs e)
+        {
+            SaveButton.Visibility = Visibility.Collapsed;
+
+            if (_sendNotifications)
+            {
+                await InitializeNotificationListener();
+            }
+
+            SendNotifications.IsOn = _sendNotifications;
+            _localSettings.Values["sendNotifications"] = _sendNotifications;
+
+            var data = new List<byte>();
+            foreach (var notificationApp in _notificationApps)
+            {
+                if (notificationApp.Delete) continue;
+                var appData = notificationApp.Serialize();
+                data.AddRange(appData);
+            }
+
+            var notificationApps = await _localFolder.GetFileAsync("notificationApps");
+            await FileIO.WriteBytesAsync(notificationApps, data.ToArray());
+
+            _loaded = false;
+            ReadNotificationApps();
+
+            _localSettings.Values["newSettings"] = true;
+        }
+
+        private void ToggleSwitch_Toggled(object sender, RoutedEventArgs e)
+        {
+            if (_loaded)
+            {
+                SaveButton.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void Grid_Loaded(object sender, RoutedEventArgs e)
+        {
+            _itemsLoaded++;
+            if (_itemsLoaded != _notificationApps.Count) return;
+            _loaded = true;
+            _itemsLoaded = 0;
         }
     }
 }

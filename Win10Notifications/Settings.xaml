@@ -25,6 +25,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -38,11 +39,11 @@
                 </ToggleButton>
                 <TextBlock Grid.Row="1" Grid.Column="0" Text="Apps:" HorizontalAlignment="Right" Margin="0,0,10,0"/>
                 <ListView x:Name="ListViewNotificationApps"
-                          Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2"
+                          Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Grid.RowSpan="2"
                           SelectionMode="None">
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="models:NotificationApp">
-                            <Grid Padding="10">
+                            <Grid Padding="10" Loaded="Grid_Loaded">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
@@ -53,8 +54,8 @@
                                     <Image Source="{x:Bind Icon}"/>
                                 </Border>
                                 <TextBlock Grid.Column="1" Text="{x:Bind Name}" VerticalAlignment="Center"/>
-                                <ToggleSwitch Grid.Column="2" IsOn="{x:Bind Value, Mode=TwoWay}" HorizontalAlignment="Right"/>
-                                <ToggleButton x:Name="DeleteButton" Grid.Column="3" Tag="{x:Bind}" Click="DeleteButton_Click" >
+                                <ToggleSwitch Grid.Column="2" IsOn="{x:Bind Value, Mode=TwoWay}" HorizontalAlignment="Right" Toggled="ToggleSwitch_Toggled"/>
+                                <ToggleButton x:Name="DeleteButton" Grid.Column="3" IsChecked="{x:Bind Delete, Mode=TwoWay}" Click="DeleteButton_Click" >
                                     <SymbolIcon Symbol="Delete"/>
                                 </ToggleButton>
                             </Grid>
@@ -66,6 +67,7 @@
                         </Style>
                     </ListView.ItemContainerStyle>
                 </ListView>
+                <Button x:Name="SaveButton" Grid.Row="2" Grid.Column="0" Visibility="Collapsed" Click="SaveButton_Click">Save changes</Button>
             </Grid>
         </Grid>
     </Grid>

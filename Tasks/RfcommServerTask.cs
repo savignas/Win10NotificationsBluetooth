@@ -17,8 +17,6 @@ using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Windows.ApplicationModel;
 using Windows.Foundation;
-using Windows.UI.Core;
-using Windows.UI.Xaml.Media.Imaging;
 using Microsoft.Toolkit.Uwp.Notifications;
 using Tasks.Models;
 
@@ -56,6 +54,8 @@ namespace Tasks
         private static List<NotificationApp> _notificationApps = new List<NotificationApp>();
 
         private static StorageFile _notificationAppsFile;
+
+        private static byte[] _oldData;
         /// <inheritdoc />
         /// <summary>
         /// The entry point of a background task.
@@ -79,6 +79,8 @@ namespace Tasks
             _listener = UserNotificationListener.Current;
 
             _notificationAppsFile = await _localFolder.GetFileAsync("notificationApps");
+
+            _oldData = await ReadNotificationApps();
 
             try
             {
@@ -152,49 +154,56 @@ namespace Tasks
             //AndroidNotifications.Add(toast);
         }
 
-        private async Task<int> ReceiveDataAsync()
+        private async Task ReceiveDataAsync()
         {
-            while (true)
+            try
             {
-                var readLength = await _reader.LoadAsync(sizeof(byte));
-                if (readLength < sizeof(byte))
+                while (true)
                 {
-                    ApplicationData.Current.LocalSettings.Values["IsBackgroundTaskActive"] = false;
-                    // Complete the background task (this raises the OnCompleted event on the corresponding BackgroundTaskRegistration). 
-                    _deferral.Complete();
-                }
-                var currentLength = _reader.ReadByte();
-
-                readLength = await _reader.LoadAsync(currentLength);
-                if (readLength < currentLength)
-                {
-                    ApplicationData.Current.LocalSettings.Values["IsBackgroundTaskActive"] = false;
-                    // Complete the background task (this raises the OnCompleted event on the corresponding BackgroundTaskRegistration). 
-                    _deferral.Complete();
-                }
-                var message = _reader.ReadString(currentLength);
-
-                var messageParts = message.Split(';');
-
-                if (messageParts[0] == "0")
-                {
-                    try
+                    var readLength = await _reader.LoadAsync(sizeof(byte));
+                    if (readLength < sizeof(byte))
                     {
-                        RemoveNotification(uint.Parse(messageParts[1]));
+                        ApplicationData.Current.LocalSettings.Values["IsBackgroundTaskActive"] = false;
+                        // Complete the background task (this raises the OnCompleted event on the corresponding BackgroundTaskRegistration). 
+                        _deferral.Complete();
                     }
-                    catch (Exception)
-                    {
-                        ToastNotificationManager.History.Remove(messageParts[1]);
-                    }
-                }
-                else if (messageParts[0] == "1")
-                {
-                    ShowNotification(messageParts[2], messageParts[3], messageParts[1]);
-                }
+                    var currentLength = _reader.ReadByte();
 
-                ApplicationData.Current.LocalSettings.Values["ReceivedMessage"] = message;
-                RemoveNotification(uint.Parse(message));
-                _taskInstance.Progress += 1;
+                    readLength = await _reader.LoadAsync(currentLength);
+                    if (readLength < currentLength)
+                    {
+                        ApplicationData.Current.LocalSettings.Values["IsBackgroundTaskActive"] = false;
+                        // Complete the background task (this raises the OnCompleted event on the corresponding BackgroundTaskRegistration). 
+                        _deferral.Complete();
+                    }
+                    var message = _reader.ReadString(currentLength);
+
+                    var messageParts = message.Split(';');
+
+                    if (messageParts[0] == "0")
+                    {
+                        try
+                        {
+                            RemoveNotification(uint.Parse(messageParts[1]));
+                        }
+                        catch (Exception)
+                        {
+                            ToastNotificationManager.History.Remove(messageParts[1]);
+                        }
+                    }
+                    else if (messageParts[0] == "1")
+                    {
+                        ShowNotification(messageParts[2], messageParts[3], messageParts[1]);
+                    }
+
+                    ApplicationData.Current.LocalSettings.Values["ReceivedMessage"] = message;
+                    RemoveNotification(uint.Parse(message));
+                    _taskInstance.Progress += 1;
+                }
+            }
+            catch (Exception)
+            {
+                // ignored
             }
         }
 
@@ -248,8 +257,6 @@ namespace Tasks
         {
             try
             {
-                _sendNotifications = LocalSettings.Values["sendNotifications"];
-
                 // Get the toast notifications
                 var notifsInPlatform = await _listener.GetNotificationsAsync(NotificationKinds.Toast);
 
@@ -307,7 +314,12 @@ namespace Tasks
                         // Insert at that position
                         Notifications.Insert(i, platNotif);
 
-                        var oldData = await ReadNotificationApps();
+                        if (LocalSettings.Values["newSettings"] != null && (bool)LocalSettings.Values["newSettings"])
+                        {
+                            _oldData = await ReadNotificationApps();
+                            _sendNotifications = LocalSettings.Values["sendNotifications"];
+                            LocalSettings.Values["newSettings"] = false;
+                        }
 
                         if (!_notificationApps.Any(x => x.Key == platNotif.AppInfo.AppUserModelId))
                         {
@@ -334,9 +346,9 @@ namespace Tasks
 
                             var newData = notificationApp.Serialize();
 
-                            var data = new byte[oldData.Length + newData.Length];
-                            System.Buffer.BlockCopy(oldData, 0, data, 0, oldData.Length);
-                            System.Buffer.BlockCopy(newData, 0, data, oldData.Length, newData.Length);
+                            var data = new byte[_oldData.Length + newData.Length];
+                            System.Buffer.BlockCopy(_oldData, 0, data, 0, _oldData.Length);
+                            System.Buffer.BlockCopy(newData, 0, data, _oldData.Length, newData.Length);
 
                             await FileIO.WriteBytesAsync(_notificationAppsFile, data);
                         }
