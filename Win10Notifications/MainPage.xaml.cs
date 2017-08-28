@@ -511,7 +511,6 @@ namespace Win10Notifications
 
         private async void InitializeRadios()
         {
-            if (!(bool)_localSettings.Values["BgServer"]) return;
             // An alternative to Radio.GetRadiosAsync is to use the Windows.Devices.Enumeration pattern,
             // passing Radio.GetDeviceSelector as the AQS string
             var radios = await Windows.Devices.Radios.Radio.GetRadiosAsync();
@@ -520,6 +519,7 @@ namespace Win10Notifications
                 var bluetoothRadio = radios.Single(x => x.Kind == RadioKind.Bluetooth);
                 _bluetooth = new Models.Radio(bluetoothRadio, this);
                 BluetoothSwitchList.Items?.Add(_bluetooth);
+                if (!(bool)_localSettings.Values["BgServer"]) return;
                 if (bluetoothRadio.State == RadioState.On)
                 {
                     InitializeRfcommServerBg();
@@ -667,6 +667,8 @@ namespace Win10Notifications
                     NotifyUser("Background watcher registered.", NotifyType.StatusMessage);
                     // Registering a background trigger if it is not already registered. Rfcomm Chat Service will now be advertised in the SDP record
                     // First get the existing tasks to see if we already registered for it
+
+                    _localSettings.Values["BgServer"] = true;
                 }
                 else
                 {
@@ -679,6 +681,7 @@ namespace Win10Notifications
                     NotifyType.ErrorMessage);
             }
 
+            if (_sendNotifications == null || !(bool) _sendNotifications) return;
             foreach (var task in BackgroundTaskRegistration.AllTasks)
             {
                 if (task.Value.Name != NotificationListenerTaskName) continue;
@@ -695,7 +698,7 @@ namespace Win10Notifications
                 // Applications registering for background trigger must request for permission.
                 backgroundAccessStatus = await BackgroundExecutionManager.RequestAccessAsync();
 
-                builder = new BackgroundTaskBuilder { TaskEntryPoint = notificationListenerTaskEntryPoint };
+                builder = new BackgroundTaskBuilder {TaskEntryPoint = notificationListenerTaskEntryPoint};
                 builder.SetTrigger(new UserNotificationChangedTrigger(NotificationKinds.Toast));
                 builder.Name = NotificationListenerTaskName;
 
@@ -705,7 +708,8 @@ namespace Win10Notifications
                     AttachProgressAndCompletedHandlersNotificationListener(_notificationListenerTaskRegistration);
 
                     // Even though the trigger is registered successfully, it might be blocked. Notify the user if that is the case.
-                    if (backgroundAccessStatus == BackgroundAccessStatus.AlwaysAllowed || backgroundAccessStatus == BackgroundAccessStatus.AllowedSubjectToSystemPolicy)
+                    if (backgroundAccessStatus == BackgroundAccessStatus.AlwaysAllowed || backgroundAccessStatus ==
+                        BackgroundAccessStatus.AllowedSubjectToSystemPolicy)
                     {
                         NotifyUser("Notification listener registered.", NotifyType.StatusMessage);
                     }

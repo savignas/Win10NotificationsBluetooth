@@ -2,9 +2,11 @@
 using System.Collections.Generic;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
+using Windows.ApplicationModel.Background;
 using Windows.Storage;
 using Windows.UI;
 using Windows.UI.Core;
+using Windows.UI.Notifications;
 using Windows.UI.Notifications.Management;
 using Windows.UI.Popups;
 using Windows.UI.Xaml;
@@ -39,6 +41,11 @@ namespace Win10Notifications
         private int _itemsLoaded;
 
         private bool _loaded;
+
+        private const string NotificationListenerTaskName = "UserNotificationChanged";
+        private string notificationListenerTaskEntryPoint = "Tasks.NotificationListenerTask";
+        private IBackgroundTaskRegistration _notificationListenerTaskRegistration;
+
 
         public Settings()
         {
@@ -106,6 +113,62 @@ namespace Win10Notifications
                 default:
                     throw new ArgumentOutOfRangeException();
             }
+
+            if (_localSettings.Values["BgServer"] == null || !(bool) _localSettings.Values["BgServer"]) return;
+            foreach (var task in BackgroundTaskRegistration.AllTasks)
+            {
+                if (task.Value.Name != NotificationListenerTaskName) continue;
+                _notificationListenerTaskRegistration = task.Value;
+                break;
+            }
+
+            if (_notificationListenerTaskRegistration == null)
+            {
+                // Applications registering for background trigger must request for permission.
+                var backgroundAccessStatus = await BackgroundExecutionManager.RequestAccessAsync();
+
+                var builder = new BackgroundTaskBuilder {TaskEntryPoint = notificationListenerTaskEntryPoint};
+                builder.SetTrigger(new UserNotificationChangedTrigger(NotificationKinds.Toast));
+                builder.Name = NotificationListenerTaskName;
+
+                try
+                {
+                    _notificationListenerTaskRegistration = builder.Register();
+                    AttachProgressAndCompletedHandlersNotificationListener(_notificationListenerTaskRegistration);
+
+                    // Even though the trigger is registered successfully, it might be blocked. Notify the user if that is the case.
+                    if (backgroundAccessStatus != BackgroundAccessStatus.AlwaysAllowed && backgroundAccessStatus !=
+                        BackgroundAccessStatus.AllowedSubjectToSystemPolicy)
+                    {
+                        var dialog = new MessageDialog("You need to turn on access to background in privacy settings!",
+                            "Error");
+                        dialog.Commands.Add(new UICommand {Label = "Close", Id = 0});
+                        dialog.CancelCommandIndex = 0;
+                        await dialog.ShowAsync();
+                    }
+                }
+                catch (Exception)
+                {
+                    // ignored
+                }
+            }
+        }
+
+        private void AttachProgressAndCompletedHandlersNotificationListener(IBackgroundTaskRegistration task)
+        {
+            task.Completed += OnCompletedNotificationListener;
+        }
+
+        private void OnCompletedNotificationListener(BackgroundTaskRegistration sender, BackgroundTaskCompletedEventArgs args)
+        {
+            try
+            {
+                args.CheckResult();
+            }
+            catch (Exception)
+            {
+                // ignored
+            }
         }
 
         private void SetSendNotificationsToggle()
@@ -125,11 +188,13 @@ namespace Win10Notifications
                 var data = await FileIO.ReadBufferAsync(notificationApps);
                 _notificationApps = await NotificationApp.Deserialize(data.ToArray());
 
+                _notificationApps.Sort((o1, o2) => string.Compare(o1.Name, o2.Name, StringComparison.Ordinal));
+
                 ListViewNotificationApps.ItemsSource = _notificationApps;
             }
             catch (Exception)
             {
-                // ignored
+                _loaded = true;
             }
         }
 
