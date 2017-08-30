@@ -112,6 +112,7 @@
     <Compile Include="NotificationListenerTask.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="RfcommServerTask.cs" />
+    <Compile Include="ToastNotificationHistoryChangedTriggerTask.cs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Microsoft.Toolkit.Uwp.Notifications">

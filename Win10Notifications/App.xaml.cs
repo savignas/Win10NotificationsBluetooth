@@ -113,6 +113,9 @@ namespace Win10Notifications
                     if (updateNotifications != null)
                         await updateNotifications;
                     break;
+                case "HistoryChanged":
+                    ((Window.Current.Content as Frame)?.Content as MainPage)?.DismissAndroidNotification();
+                    break;
             }
             deferral.Complete();
         }

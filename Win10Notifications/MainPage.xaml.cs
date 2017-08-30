@@ -51,6 +51,7 @@ namespace Win10Notifications
         // The background task registration for the background advertisement watcher 
         private IBackgroundTaskRegistration _taskRegistration;
         private IBackgroundTaskRegistration _notificationListenerTaskRegistration;
+        private IBackgroundTaskRegistration _historyTaskRegistration;
         // The watcher trigger used to configure the background task registration 
         private readonly RfcommConnectionTrigger _trigger;
         // A name is given to the task in order for it to be identifiable across context. 
@@ -58,9 +59,14 @@ namespace Win10Notifications
 
         private const string NotificationListenerTaskName = "UserNotificationChanged";
 
+        private const string HistoryTaskName = "ToastNotificationHistoryChangedTriggerTask";
+
         // Entry point for the background task. 
-        private string taskEntryPoint = "Tasks.RfcommServerTask";
-        private string notificationListenerTaskEntryPoint = "Tasks.NotificationListenerTask";
+        private const string TaskEntryPoint = "Tasks.RfcommServerTask";
+
+        private const string NotificationListenerTaskEntryPoint = "Tasks.NotificationListenerTask";
+
+        private const string HistoryTaskEntryPoint = "Tasks.ToastNotificationHistoryChangedTriggerTask";
 
         // Define the raw bytes that are converted into SDP record
         private readonly byte[] _sdpRecordBlob = {
@@ -108,6 +114,7 @@ namespace Win10Notifications
             InitializeComponent();
             InitializeRadios();
             InitializeNotificationListener();
+            InitializeHistoryChangedTask();
             OpenNotificationAppsFile();
 
             _trigger = new RfcommConnectionTrigger();
@@ -162,6 +169,25 @@ namespace Win10Notifications
             }
 
             await UpdateNotifications();
+        }
+
+        private static void InitializeHistoryChangedTask()
+        {
+            // If background task isn't registered yet
+            if (!BackgroundTaskRegistration.AllTasks.Any(i => i.Value.Name.Equals("HistoryChanged")))
+            {
+                // Specify the background task
+                var builder = new BackgroundTaskBuilder()
+                {
+                    Name = "HistoryChanged"
+                };
+
+                // Set the trigger for Listener, listening to Toast Notifications
+                builder.SetTrigger(new ToastNotificationHistoryChangedTrigger());
+
+                // Register the task
+                builder.Register();
+            }
         }
 
         private async void OpenNotificationAppsFile()
@@ -250,40 +276,15 @@ namespace Win10Notifications
                     var existingNotif = Notifications[i];
 
                     // If not in platform anymore, remove from our list
-                    if (!notifsInPlatform.Any(n => n.Id == existingNotif.Id))
+                    if (notifsInPlatform.Any(n => n.Id == existingNotif.Id)) continue;
+                    Notifications.RemoveAt(i);
+                    i--;
+
+                    if (existingNotif.AppInfo.PackageFamilyName == _packageFamilyName || _sendNotifications == null ||
+                        !(bool) _sendNotifications) continue;
+                    if (DisconnectButton.IsEnabled)
                     {
-                        Notifications.RemoveAt(i);
-                        i--;
-
-                        if (existingNotif.AppInfo.PackageFamilyName != _packageFamilyName &&
-                            _sendNotifications != null && (bool) _sendNotifications)
-                        {
-                            if (DisconnectButton.IsEnabled)
-                            {
-                                SendMessage("0", existingNotif);
-                            }
-                            /*else if (DisconnectButtonBg.IsEnabled)
-                            {
-                                SendMessageBg("0", existingNotif);
-                            }*/
-                        }
-                    }
-                }
-
-                var androidNotificationHistory = ToastNotificationManager.History.GetHistory();
-                for (var i = 0; i < AndroidNotifications.Count; i++)
-                {
-                    var existingAndroidNotif = AndroidNotifications[i];
-
-                    if (!androidNotificationHistory.Any(n => n.Tag == existingAndroidNotif.Tag))
-                    {
-                        AndroidNotifications.RemoveAt(i);
-                        i--;
-
-                        if (DisconnectButton.IsEnabled)
-                        {
-                            SendMessage("0;" + existingAndroidNotif.Tag);
-                        }
+                        SendMessage("0", existingNotif);
                     }
                 }
 
@@ -300,23 +301,15 @@ namespace Win10Notifications
                     if (indexOfExisting != -1)
                     {
                         // And if it's in the wrong position
-                        if (i != indexOfExisting)
-                        {
-                            // Move it to the right position
-                            Notifications.Move(indexOfExisting, i);
+                        if (i == indexOfExisting) continue;
+                        // Move it to the right position
+                        Notifications.Move(indexOfExisting, i);
 
-                            if (platNotif.AppInfo.PackageFamilyName != _packageFamilyName &&
-                                _sendNotifications != null && (bool) _sendNotifications)
-                            {
-                                if (DisconnectButton.IsEnabled)
-                                {
-                                    SendMessage("2", platNotif);
-                                }
-                                /*else if (DisconnectButtonBg.IsEnabled)
-                                {
-                                    SendMessageBg("2", platNotif);
-                                }*/
-                            }
+                        if (platNotif.AppInfo.PackageFamilyName == _packageFamilyName ||
+                            _sendNotifications == null || !(bool) _sendNotifications) continue;
+                        if (DisconnectButton.IsEnabled)
+                        {
+                            SendMessage("2", platNotif);
                         }
 
                         // Otherwise, leave it in its place
@@ -335,7 +328,7 @@ namespace Win10Notifications
                             _localSettings.Values["newSettings"] = false;
                         }
 
-                        if (!_notificationApps.Any(x => x.Key == platNotif.AppInfo.AppUserModelId))
+                        if (_notificationApps.All(x => x.Key != platNotif.AppInfo.AppUserModelId))
                         {
                             var notificationApp = new NotificationApp
                             {
@@ -367,17 +360,12 @@ namespace Win10Notifications
                             await FileIO.WriteBytesAsync(_notificationAppsFile, data);
                         }
 
-                        if (platNotif.AppInfo.PackageFamilyName != _packageFamilyName &&
-                            _sendNotifications != null && (bool) _sendNotifications && _notificationApps.Any(x => x.Key == platNotif.AppInfo.AppUserModelId && x.Value))
+                        if (platNotif.AppInfo.PackageFamilyName == _packageFamilyName || _sendNotifications == null ||
+                            !(bool) _sendNotifications ||
+                            !_notificationApps.Any(x => x.Key == platNotif.AppInfo.AppUserModelId && x.Value)) continue;
+                        if (DisconnectButton.IsEnabled)
                         {
-                            if (DisconnectButton.IsEnabled)
-                            {
-                                SendMessage("1", platNotif);
-                            }
-                            /*else if (DisconnectButtonBg.IsEnabled)
-                            {
-                                SendMessageBg("1", platNotif);
-                            }*/
+                            SendMessage("1", platNotif);
                         }
                     }
                 }
@@ -387,6 +375,24 @@ namespace Win10Notifications
                 Error = "Error updating notifications: " + ex;
             }
 
+        }
+
+        public void DismissAndroidNotification()
+        {
+            var androidNotificationHistory = ToastNotificationManager.History.GetHistory();
+            for (var i = 0; i < AndroidNotifications.Count; i++)
+            {
+                var existingAndroidNotif = AndroidNotifications[i];
+
+                if (androidNotificationHistory.Any(n => n.Tag == existingAndroidNotif.Tag)) continue;
+                AndroidNotifications.RemoveAt(i);
+                i--;
+
+                if (DisconnectButton.IsEnabled)
+                {
+                    SendMessage("0;" + existingAndroidNotif.Tag);
+                }
+            }
         }
 
         private async Task<byte[]> ReadNotificationApps()
@@ -651,7 +657,7 @@ namespace Win10Notifications
             // Applications registering for background trigger must request for permission.
             var backgroundAccessStatus = await BackgroundExecutionManager.RequestAccessAsync();
 
-            var builder = new BackgroundTaskBuilder { TaskEntryPoint = taskEntryPoint };
+            var builder = new BackgroundTaskBuilder { TaskEntryPoint = TaskEntryPoint };
             builder.SetTrigger(_trigger);
             builder.Name = TaskName;
 
@@ -681,6 +687,46 @@ namespace Win10Notifications
                     NotifyType.ErrorMessage);
             }
 
+            foreach (var task in BackgroundTaskRegistration.AllTasks)
+            {
+                if (task.Value.Name != HistoryTaskName) continue;
+                _historyTaskRegistration = task.Value;
+                break;
+            }
+
+            if (_historyTaskRegistration != null)
+            {
+                NotifyUser("History background watcher already registered.", NotifyType.StatusMessage);
+                return;
+            }
+
+            builder = new BackgroundTaskBuilder { TaskEntryPoint = HistoryTaskEntryPoint };
+            builder.SetTrigger(new ToastNotificationHistoryChangedTrigger());
+            builder.Name = TaskName;
+
+            try
+            {
+                _historyTaskRegistration = builder.Register();
+
+                // Even though the trigger is registered successfully, it might be blocked. Notify the user if that is the case.
+                if (backgroundAccessStatus == BackgroundAccessStatus.AlwaysAllowed ||
+                    backgroundAccessStatus == BackgroundAccessStatus.AllowedSubjectToSystemPolicy)
+                {
+                    NotifyUser("History background watcher registered.", NotifyType.StatusMessage);
+                    // Registering a background trigger if it is not already registered. Rfcomm Chat Service will now be advertised in the SDP record
+                    // First get the existing tasks to see if we already registered for it
+                }
+                else
+                {
+                    NotifyUser("Background tasks may be disabled for this app", NotifyType.ErrorMessage);
+                }
+            }
+            catch (Exception)
+            {
+                NotifyUser("History background task not registered",
+                    NotifyType.ErrorMessage);
+            }
+
             if (_sendNotifications == null || !(bool) _sendNotifications) return;
             foreach (var task in BackgroundTaskRegistration.AllTasks)
             {
@@ -695,17 +741,14 @@ namespace Win10Notifications
             }
             else
             {
-                // Applications registering for background trigger must request for permission.
-                backgroundAccessStatus = await BackgroundExecutionManager.RequestAccessAsync();
-
-                builder = new BackgroundTaskBuilder {TaskEntryPoint = notificationListenerTaskEntryPoint};
+                builder = new BackgroundTaskBuilder {TaskEntryPoint = NotificationListenerTaskEntryPoint};
                 builder.SetTrigger(new UserNotificationChangedTrigger(NotificationKinds.Toast));
                 builder.Name = NotificationListenerTaskName;
 
                 try
                 {
                     _notificationListenerTaskRegistration = builder.Register();
-                    AttachProgressAndCompletedHandlersNotificationListener(_notificationListenerTaskRegistration);
+                    _notificationListenerTaskRegistration.Completed += OnCompletedNotificationListener;
 
                     // Even though the trigger is registered successfully, it might be blocked. Notify the user if that is the case.
                     if (backgroundAccessStatus == BackgroundAccessStatus.AlwaysAllowed || backgroundAccessStatus ==
@@ -827,23 +870,21 @@ namespace Win10Notifications
             var notifMessage = GetNotificationMessage(type, notification);
 
             // There's no need to send a zero length message
-            if (notifMessage.Length != 0)
+            if (notifMessage.Length == 0) return;
+            // Make sure that the connection is still up and there is a message to send
+            if (_socket != null)
             {
-                // Make sure that the connection is still up and there is a message to send
-                if (_socket != null)
-                {
-                    //_writer.WriteUInt32((uint)notifMessage.Length);
-                    _writer.WriteString(notifMessage);
+                //_writer.WriteUInt32((uint)notifMessage.Length);
+                _writer.WriteString(notifMessage);
 
-                    ConversationListBox.Items?.Add("Sent: " + notifMessage);
-                    //WriteFile("Sent: " + notifMessage);
+                ConversationListBox.Items?.Add("Sent: " + notifMessage);
+                //WriteFile("Sent: " + notifMessage);
 
-                    await _writer.StoreAsync();
-                }
-                else
-                {
-                    NotifyUser("No clients connected", NotifyType.StatusMessage);
-                }
+                await _writer.StoreAsync();
+            }
+            else
+            {
+                NotifyUser("No clients connected", NotifyType.StatusMessage);
             }
         }
 
@@ -939,7 +980,6 @@ namespace Win10Notifications
             {
                 NotifyUser(ex.Message, NotifyType.ErrorMessage);
             }
-            //DisconnectBg();
         }
 
         private async void OnCompletedNotificationListener(BackgroundTaskRegistration sender, BackgroundTaskCompletedEventArgs args)
@@ -1058,6 +1098,19 @@ namespace Win10Notifications
                 }
                 // Unregistering the background task will remove the Rfcomm Chat Service from the SDP record and stop listening for incoming connections
                 // First get the existing tasks to see if we already registered for it
+                if (_historyTaskRegistration != null)
+                {
+                    _historyTaskRegistration.Unregister(true);
+                    _historyTaskRegistration = null;
+                    NotifyUser("History background watcher unregistered.", NotifyType.StatusMessage);
+                }
+                else
+                {
+                    // At this point we assume we haven't found any existing tasks matching the one we want to unregister
+                    NotifyUser("No registered background watcher found.", NotifyType.StatusMessage);
+                }
+                // Unregistering the background task will remove the Rfcomm Chat Service from the SDP record and stop listening for incoming connections
+                // First get the existing tasks to see if we already registered for it
                 if (_notificationListenerTaskRegistration != null)
                 {
                     _notificationListenerTaskRegistration.Unregister(true);
@@ -1072,29 +1125,6 @@ namespace Win10Notifications
             });
         }
 
-        private async void DisconnectBg()
-        {
-            await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
-            {
-                ConversationListBox.Items?.Clear();
-
-                // Unregistering the background task will remove the Rfcomm Chat Service from the SDP record and stop listening for incoming connections
-                // First get the existing tasks to see if we already registered for it
-                if (_taskRegistration != null)
-                {
-                    _taskRegistration.Unregister(true);
-                    _taskRegistration = null;
-                    NotifyUser("Background watcher unregistered.", NotifyType.StatusMessage);
-                }
-                else
-                {
-                    // At this point we assume we haven't found any existing tasks matching the one we want to unregister
-                    NotifyUser("No registered background watcher found.", NotifyType.StatusMessage);
-                }
-                InitializeRfcommServerBg();
-            });
-        }
-
         /// <summary>
         /// The background task updates the progress counter.  When that happens, this event handler gets invoked
         /// When the handler is invoked, we will display the value stored in local settings to the user.
@@ -1103,60 +1133,27 @@ namespace Win10Notifications
         /// <param name="args"></param>
         private async void OnProgress(IBackgroundTaskRegistration task, BackgroundTaskProgressEventArgs args)
         {
+            if (!ApplicationData.Current.LocalSettings.Values.Keys.Contains("ReceivedMessage")) return;
+            var backgroundMessage = (string)ApplicationData.Current.LocalSettings.Values["ReceivedMessage"];
+            var remoteDeviceName = (string)ApplicationData.Current.LocalSettings.Values["RemoteDeviceName"];
 
-            if (ApplicationData.Current.LocalSettings.Values.Keys.Contains("ReceivedMessage"))
+            if (!backgroundMessage.Equals(""))
             {
-                var backgroundMessage = (string)ApplicationData.Current.LocalSettings.Values["ReceivedMessage"];
-                var remoteDeviceName = (string)ApplicationData.Current.LocalSettings.Values["RemoteDeviceName"];
-
-                if (!backgroundMessage.Equals(""))
+                await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                 {
-                    await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
-                    {
-                        NotifyUser("Client Connected: " + remoteDeviceName, NotifyType.StatusMessage);
-                        //CreateFile();
-                        ConversationListBox.Items?.Add("Received: " + backgroundMessage);
-                        //WriteFile("Received: " + backgroundMessage);
-                        RemoveNotification(uint.Parse(backgroundMessage));
-                        SendNotificationsOnConnectBg();
-                    });
-                }
+                    NotifyUser("Client Connected: " + remoteDeviceName, NotifyType.StatusMessage);
+                    //CreateFile();
+                    ConversationListBox.Items?.Add("Received: " + backgroundMessage);
+                    //WriteFile("Received: " + backgroundMessage);
+                    SendNotificationsOnConnectBg();
+                });
             }
-        }
-
-        private void OnProgressNotificationListener(IBackgroundTaskRegistration task, BackgroundTaskProgressEventArgs args)
-        {
-
-            /*if (ApplicationData.Current.LocalSettings.Values.Keys.Contains("ReceivedMessage"))
-            {
-                string backgroundMessage = (string)ApplicationData.Current.LocalSettings.Values["ReceivedMessage"];
-                string remoteDeviceName = (string)ApplicationData.Current.LocalSettings.Values["RemoteDeviceName"];
-
-                if (!backgroundMessage.Equals(""))
-                {
-                    await Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
-                    {
-                        NotifyUser("Client Connected: " + remoteDeviceName, NotifyType.StatusMessage);
-                        CreateFile();
-                        ConversationListBox.Items.Add("Received: " + backgroundMessage);
-                        WriteFile("Received: " + backgroundMessage);
-                        RemoveNotification(UInt32.Parse(backgroundMessage));
-                        SendNotificationsOnConnectBg();
-                    });
-                }
-            }*/
         }
 
         private void AttachProgressAndCompletedHandlers(IBackgroundTaskRegistration task)
         {
             task.Progress += OnProgress;
             task.Completed += OnCompleted;
-        }
-
-        private void AttachProgressAndCompletedHandlersNotificationListener(IBackgroundTaskRegistration task)
-        {
-            task.Progress += OnProgressNotificationListener;
-            task.Completed += OnCompletedNotificationListener;
         }
 
         /// <summary>
@@ -1264,15 +1261,13 @@ namespace Win10Notifications
             }
 
             reader.DetachStream();
-            if (remoteDisconnection)
+            if (!remoteDisconnection) return;
+            Disconnect();
+            await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
             {
-                Disconnect();
-                await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
-                {
-                    NotifyUser("Client (" + remoteDevice.Name + ") disconnected", NotifyType.StatusMessage);
-                    DisconnectButton.Content = "Disconnect Foreground Server";
-                });
-            }
+                NotifyUser("Client (" + remoteDevice.Name + ") disconnected", NotifyType.StatusMessage);
+                DisconnectButton.Content = "Disconnect Foreground Server";
+            });
         }
 
         private void Toggle_IsEnabledChanged(object sender, DependencyPropertyChangedEventArgs e)

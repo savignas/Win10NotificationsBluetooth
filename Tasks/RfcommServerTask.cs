@@ -33,6 +33,7 @@ namespace Tasks
 
         private static UserNotificationListener _listener;
         private static ObservableCollection<UserNotification> Notifications { get; } = new ObservableCollection<UserNotification>();
+        private static ObservableCollection<ToastNotification> AndroidNotifications { get; } = new ObservableCollection<ToastNotification>();
 
         private BackgroundTaskDeferral _deferral;
         private IBackgroundTaskInstance _taskInstance;
@@ -42,8 +43,6 @@ namespace Tasks
         ThreadPoolTimer _periodicTimer;
 
         private static readonly string PackageFamilyName = Package.Current.Id.FamilyName;
-
-        private static object _sendNotifications;
 
         private static readonly ApplicationDataContainer LocalSettings =
             ApplicationData.Current.LocalSettings;
@@ -72,7 +71,7 @@ namespace Tasks
             _taskInstance.Progress = 0;
 
             // Store a setting so that the app knows that the task is running. 
-            ApplicationData.Current.LocalSettings.Values["IsBackgroundTaskActive"] = true;
+            LocalSettings.Values["IsBackgroundTaskActive"] = true;
 
             _periodicTimer = ThreadPoolTimer.CreatePeriodicTimer(PeriodicTimerCallback, TimeSpan.FromSeconds(1));
 
@@ -89,14 +88,14 @@ namespace Tasks
                 {
                     _socket = details.Socket;
                     _remoteDevice = details.RemoteDevice;
-                    ApplicationData.Current.LocalSettings.Values["RemoteDeviceName"] = _remoteDevice.Name;
+                    LocalSettings.Values["RemoteDeviceName"] = _remoteDevice.Name;
 
                     _writer = new DataWriter(_socket.OutputStream);
                     _reader = new DataReader(_socket.InputStream);
                 }
                 else
                 {
-                    ApplicationData.Current.LocalSettings.Values["BackgroundTaskStatus"] = "Trigger details returned null";
+                    LocalSettings.Values["BackgroundTaskStatus"] = "Trigger details returned null";
                     _deferral.Complete();
                 }
 
@@ -118,9 +117,9 @@ namespace Tasks
             _cancelReason = reason;
             _cancelRequested = true;
 
-            ApplicationData.Current.LocalSettings.Values["TaskCancelationReason"] = _cancelReason.ToString();
-            ApplicationData.Current.LocalSettings.Values["IsBackgroundTaskActive"] = false;
-            ApplicationData.Current.LocalSettings.Values["ReceivedMessage"] = "";
+            LocalSettings.Values["TaskCancelationReason"] = _cancelReason.ToString();
+            LocalSettings.Values["IsBackgroundTaskActive"] = false;
+            LocalSettings.Values["ReceivedMessage"] = "";
             // Complete the background task (this raises the OnCompleted event on the corresponding BackgroundTaskRegistration). 
             _deferral.Complete();
         }
@@ -151,7 +150,7 @@ namespace Tasks
 
             var toast = new ToastNotification(toastContent.GetXml()) { Tag = key };
             ToastNotificationManager.CreateToastNotifier().Show(toast);
-            //AndroidNotifications.Add(toast);
+            AndroidNotifications.Add(toast);
         }
 
         private async Task ReceiveDataAsync()
@@ -163,7 +162,7 @@ namespace Tasks
                     var readLength = await _reader.LoadAsync(sizeof(byte));
                     if (readLength < sizeof(byte))
                     {
-                        ApplicationData.Current.LocalSettings.Values["IsBackgroundTaskActive"] = false;
+                        LocalSettings.Values["IsBackgroundTaskActive"] = false;
                         // Complete the background task (this raises the OnCompleted event on the corresponding BackgroundTaskRegistration). 
                         _deferral.Complete();
                     }
@@ -172,7 +171,7 @@ namespace Tasks
                     readLength = await _reader.LoadAsync(currentLength);
                     if (readLength < currentLength)
                     {
-                        ApplicationData.Current.LocalSettings.Values["IsBackgroundTaskActive"] = false;
+                        LocalSettings.Values["IsBackgroundTaskActive"] = false;
                         // Complete the background task (this raises the OnCompleted event on the corresponding BackgroundTaskRegistration). 
                         _deferral.Complete();
                     }
@@ -196,8 +195,7 @@ namespace Tasks
                         ShowNotification(messageParts[2], messageParts[3], messageParts[1]);
                     }
 
-                    ApplicationData.Current.LocalSettings.Values["ReceivedMessage"] = message;
-                    RemoveNotification(uint.Parse(message));
+                    LocalSettings.Values["ReceivedMessage"] = message;
                     _taskInstance.Progress += 1;
                 }
             }
@@ -216,7 +214,7 @@ namespace Tasks
         {
             if (!_cancelRequested)
             {
-                var message = (string)ApplicationData.Current.LocalSettings.Values["SendMessage"];
+                var message = (string) LocalSettings.Values["SendMessage"];
                 if (string.IsNullOrEmpty(message)) return;
                 try
                 {
@@ -227,7 +225,7 @@ namespace Tasks
                         _writer.WriteString(message);
                         await _writer.StoreAsync();
 
-                        ApplicationData.Current.LocalSettings.Values["SendMessage"] = null;
+                        LocalSettings.Values["SendMessage"] = null;
                     }
                     else
                     {
@@ -237,8 +235,8 @@ namespace Tasks
                 }
                 catch (Exception ex)
                 {
-                    ApplicationData.Current.LocalSettings.Values["TaskCancelationReason"] = ex.Message;
-                    ApplicationData.Current.LocalSettings.Values["SendMessage"] = null;
+                    LocalSettings.Values["TaskCancelationReason"] = ex.Message;
+                    LocalSettings.Values["SendMessage"] = null;
                     _deferral.Complete();
                 }
             }
@@ -249,7 +247,7 @@ namespace Tasks
                 //
                 // Write to LocalSettings to indicate that this background task ran.
                 //
-                ApplicationData.Current.LocalSettings.Values["TaskCancelationReason"] = _cancelReason.ToString();
+                LocalSettings.Values["TaskCancelationReason"] = _cancelReason.ToString();
             }
         }
 
@@ -269,15 +267,14 @@ namespace Tasks
                     var existingNotif = Notifications[i];
 
                     // If not in platform anymore, remove from our list
-                    if (!notifsInPlatform.Any(n => n.Id == existingNotif.Id))
-                    {
-                        Notifications.RemoveAt(i);
-                        i--;
+                    if (notifsInPlatform.Any(n => n.Id == existingNotif.Id)) continue;
+                    Notifications.RemoveAt(i);
+                    i--;
 
-                        if ((bool)ApplicationData.Current.LocalSettings.Values["IsBackgroundTaskActive"])
-                        {
-                            SendMessageBg("0", existingNotif);
-                        }
+                    if ((bool) LocalSettings.Values["IsBackgroundTaskActive"] &&
+                        existingNotif.AppInfo.PackageFamilyName != PackageFamilyName)
+                    {
+                        SendMessageBg("0", existingNotif);
                     }
                 }
 
@@ -299,7 +296,8 @@ namespace Tasks
                             // Move it to the right position
                             Notifications.Move(indexOfExisting, i);
 
-                            if ((bool)ApplicationData.Current.LocalSettings.Values["IsBackgroundTaskActive"])
+                            if ((bool) LocalSettings.Values["IsBackgroundTaskActive"] &&
+                                platNotif.AppInfo.PackageFamilyName != PackageFamilyName)
                             {
                                 SendMessageBg("2", platNotif);
                             }
@@ -317,11 +315,10 @@ namespace Tasks
                         if (LocalSettings.Values["newSettings"] != null && (bool)LocalSettings.Values["newSettings"])
                         {
                             _oldData = await ReadNotificationApps();
-                            _sendNotifications = LocalSettings.Values["sendNotifications"];
                             LocalSettings.Values["newSettings"] = false;
                         }
 
-                        if (!_notificationApps.Any(x => x.Key == platNotif.AppInfo.AppUserModelId))
+                        if (_notificationApps.All(x => x.Key != platNotif.AppInfo.AppUserModelId))
                         {
                             var notificationApp = new NotificationApp
                             {
@@ -353,8 +350,9 @@ namespace Tasks
                             await FileIO.WriteBytesAsync(_notificationAppsFile, data);
                         }
 
-                        if ((bool)ApplicationData.Current.LocalSettings.Values["IsBackgroundTaskActive"] && platNotif.AppInfo.PackageFamilyName != PackageFamilyName &&
-                            _sendNotifications != null && (bool)_sendNotifications && _notificationApps.Any(x => x.Key == platNotif.AppInfo.AppUserModelId && x.Allowed))
+                        if ((bool) LocalSettings.Values["IsBackgroundTaskActive"] &&
+                            platNotif.AppInfo.PackageFamilyName != PackageFamilyName &&
+                            _notificationApps.Any(x => x.Key == platNotif.AppInfo.AppUserModelId && x.Allowed))
                         {
                             SendMessageBg("1", platNotif);
                         }
@@ -364,6 +362,24 @@ namespace Tasks
             catch (Exception)
             {
                 // ignored
+            }
+        }
+
+        public static void DismissAndroidNotification()
+        {
+            var androidNotificationHistory = ToastNotificationManager.History.GetHistory();
+            for (var i = 0; i < AndroidNotifications.Count; i++)
+            {
+                var existingAndroidNotif = AndroidNotifications[i];
+
+                if (androidNotificationHistory.Any(n => n.Tag == existingAndroidNotif.Tag)) continue;
+                AndroidNotifications.RemoveAt(i);
+                i--;
+
+                if ((bool) LocalSettings.Values["IsBackgroundTaskActive"])
+                {
+                    SendMessageBg("0;" + existingAndroidNotif.Tag);
+                }
             }
         }
 
@@ -492,13 +508,34 @@ namespace Tasks
                     notifMessage = type + ";" + id;
                 }
 
-                var previousMessage = (string)ApplicationData.Current.LocalSettings.Values["SendMessage"];
+                var previousMessage = (string) LocalSettings.Values["SendMessage"];
 
                 // Make sure previous message has been sent
                 if (string.IsNullOrEmpty(previousMessage))
                 {
                     // Save the current message to local settings so the background task can pick it up. 
-                    ApplicationData.Current.LocalSettings.Values["SendMessage"] = notifMessage;
+                    LocalSettings.Values["SendMessage"] = notifMessage;
+                }
+                else
+                {
+                    // Do nothing until previous message has been sent.  
+                    continue;
+                }
+                break;
+            }
+        }
+
+        private static void SendMessageBg(string notifMessage)
+        {
+            while (true)
+            {
+                var previousMessage = (string) LocalSettings.Values["SendMessage"];
+
+                // Make sure previous message has been sent
+                if (string.IsNullOrEmpty(previousMessage))
+                {
+                    // Save the current message to local settings so the background task can pick it up. 
+                    LocalSettings.Values["SendMessage"] = notifMessage;
                 }
                 else
                 {
