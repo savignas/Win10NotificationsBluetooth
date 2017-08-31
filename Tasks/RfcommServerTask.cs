@@ -55,6 +55,8 @@ namespace Tasks
         private static StorageFile _notificationAppsFile;
 
         private static byte[] _oldData;
+
+        private static readonly Queue<string> SendMessages = new Queue<string>();
         /// <inheritdoc />
         /// <summary>
         /// The entry point of a background task.
@@ -110,6 +112,8 @@ namespace Tasks
 
                 Debug.WriteLine("Exception occurred while initializing the connection, hr = " + ex.HResult.ToString("X"));
             }
+
+            UpdateNotifications();
         }
 
         private void OnCanceled(IBackgroundTaskInstance taskInstance, BackgroundTaskCancellationReason reason)
@@ -124,7 +128,7 @@ namespace Tasks
             _deferral.Complete();
         }
 
-        public void ShowNotification(string title, string content, string key)
+        public void ShowNotification(string appName, string title, string content, string key)
         {
             var visual = new ToastVisual
             {
@@ -140,6 +144,10 @@ namespace Tasks
                         {
                             Text = content
                         }
+                    },
+                    Attribution = new ToastGenericAttributionText()
+                    {
+                        Text = appName
                     }
                 }
             };
@@ -192,7 +200,7 @@ namespace Tasks
                     }
                     else if (messageParts[0] == "1")
                     {
-                        ShowNotification(messageParts[2], messageParts[3], messageParts[1]);
+                        ShowNotification(messageParts[2], messageParts[3], messageParts[4], messageParts[1]);
                     }
 
                     LocalSettings.Values["ReceivedMessage"] = message;
@@ -214,8 +222,16 @@ namespace Tasks
         {
             if (!_cancelRequested)
             {
-                var message = (string) LocalSettings.Values["SendMessage"];
-                if (string.IsNullOrEmpty(message)) return;
+                string message;
+                try
+                {
+                    message = SendMessages.Dequeue();
+                }
+                catch (Exception)
+                {
+                    return;
+                }
+                
                 try
                 {
                     // Make sure that the connection is still up and there is a message to send
@@ -224,8 +240,6 @@ namespace Tasks
                         //writer.WriteUInt32((uint)message.Length);
                         _writer.WriteString(message);
                         await _writer.StoreAsync();
-
-                        LocalSettings.Values["SendMessage"] = null;
                     }
                     else
                     {
@@ -236,7 +250,6 @@ namespace Tasks
                 catch (Exception ex)
                 {
                     LocalSettings.Values["TaskCancelationReason"] = ex.Message;
-                    LocalSettings.Values["SendMessage"] = null;
                     _deferral.Complete();
                 }
             }
@@ -291,16 +304,14 @@ namespace Tasks
                     if (indexOfExisting != -1)
                     {
                         // And if it's in the wrong position
-                        if (i != indexOfExisting)
-                        {
-                            // Move it to the right position
-                            Notifications.Move(indexOfExisting, i);
+                        if (i == indexOfExisting) continue;
+                        // Move it to the right position
+                        Notifications.Move(indexOfExisting, i);
 
-                            if ((bool) LocalSettings.Values["IsBackgroundTaskActive"] &&
-                                platNotif.AppInfo.PackageFamilyName != PackageFamilyName)
-                            {
-                                SendMessageBg("2", platNotif);
-                            }
+                        if ((bool) LocalSettings.Values["IsBackgroundTaskActive"] &&
+                            platNotif.AppInfo.PackageFamilyName != PackageFamilyName)
+                        {
+                            SendMessageBg("2", platNotif);
                         }
 
                         // Otherwise, leave it in its place
@@ -378,7 +389,7 @@ namespace Tasks
 
                 if ((bool) LocalSettings.Values["IsBackgroundTaskActive"])
                 {
-                    SendMessageBg("0;" + existingAndroidNotif.Tag);
+                    SendMessages.Enqueue("0;" + existingAndroidNotif.Tag);
                 }
             }
         }
@@ -466,84 +477,47 @@ namespace Tasks
 
         private static void SendMessageBg(string type, UserNotification notification)
         {
-            while (true)
+            // Get the toast binding, if present
+            var toastBinding = notification.Notification.Visual.GetBinding(KnownNotificationBindings.ToastGeneric);
+            var id = notification.Id;
+            string notifMessage;
+
+            if (type == "1")
             {
-                // Get the toast binding, if present
-                var toastBinding = notification.Notification.Visual.GetBinding(KnownNotificationBindings.ToastGeneric);
-                var id = notification.Id;
-                string notifMessage;
+                var appName = "";
+                var titleText = "No title";
+                var bodyText = "";
 
-                if (type == "1")
+                if (toastBinding != null)
                 {
-                    var appName = "";
-                    var titleText = "No title";
-                    var bodyText = "";
-
-                    if (toastBinding != null)
+                    try
                     {
-                        try
-                        {
-                            appName = notification.AppInfo.DisplayInfo.DisplayName;
-                        }
-                        catch (Exception)
-                        {
-                            // ignored
-                        }
-
-                        // And then get the text elements from the toast binding
-                        var textElements = toastBinding.GetTextElements();
-
-                        // Treat the first text element as the title text
-                        titleText = textElements.FirstOrDefault()?.Text;
-
-                        // We'll treat all subsequent text elements as body text,
-                        // joining them together via newlines.
-                        bodyText = string.Join("\n", textElements.Skip(1).Select(t => t.Text));
+                        appName = notification.AppInfo.DisplayInfo.DisplayName;
+                    }
+                    catch (Exception)
+                    {
+                        // ignored
                     }
 
-                    notifMessage = type + ";" + id + ";" + appName + ";" + titleText + ";" + bodyText;
-                }
-                else
-                {
-                    notifMessage = type + ";" + id;
+                    // And then get the text elements from the toast binding
+                    var textElements = toastBinding.GetTextElements();
+
+                    // Treat the first text element as the title text
+                    titleText = textElements.FirstOrDefault()?.Text;
+
+                    // We'll treat all subsequent text elements as body text,
+                    // joining them together via newlines.
+                    bodyText = string.Join("\n", textElements.Skip(1).Select(t => t.Text));
                 }
 
-                var previousMessage = (string) LocalSettings.Values["SendMessage"];
-
-                // Make sure previous message has been sent
-                if (string.IsNullOrEmpty(previousMessage))
-                {
-                    // Save the current message to local settings so the background task can pick it up. 
-                    LocalSettings.Values["SendMessage"] = notifMessage;
-                }
-                else
-                {
-                    // Do nothing until previous message has been sent.  
-                    continue;
-                }
-                break;
+                notifMessage = type + ";" + id + ";" + appName + ";" + titleText + ";" + bodyText;
             }
-        }
-
-        private static void SendMessageBg(string notifMessage)
-        {
-            while (true)
+            else
             {
-                var previousMessage = (string) LocalSettings.Values["SendMessage"];
-
-                // Make sure previous message has been sent
-                if (string.IsNullOrEmpty(previousMessage))
-                {
-                    // Save the current message to local settings so the background task can pick it up. 
-                    LocalSettings.Values["SendMessage"] = notifMessage;
-                }
-                else
-                {
-                    // Do nothing until previous message has been sent.  
-                    continue;
-                }
-                break;
+                notifMessage = type + ";" + id;
             }
+
+            SendMessages.Enqueue(notifMessage);
         }
     }   
 }

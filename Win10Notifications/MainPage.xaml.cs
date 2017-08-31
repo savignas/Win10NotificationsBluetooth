@@ -91,8 +91,6 @@ namespace Win10Notifications
                 0x69, 0x6e, 0x20, 0x43, 0x23                                    // in C#
         };
 
-        private StorageFile _file;
-
         private readonly string _packageFamilyName = Package.Current.Id.FamilyName;
 
         private object _sendNotifications;
@@ -411,39 +409,11 @@ namespace Win10Notifications
             
         }
 
-        private async void CreateFile()
-        {
-            var folder = ApplicationData.Current.LocalFolder;
-            _file = await folder.CreateFileAsync("win10notifications.txt",
-                CreationCollisionOption.ReplaceExisting);
-        }
-
-        private async void WriteFile(string text)
-        {
-            if (_file == null) return;
-            try
-            {
-                await FileIO.AppendTextAsync(_file, text + '\n');
-            }
-            catch (Exception)
-            {
-                // ignored
-            }
-        }
-
         private void SendNotificationsOnConnect()
         {
             foreach (var notification in Notifications)
             {
                 SendMessage("1", notification);
-            }
-        }
-
-        private void SendNotificationsOnConnectBg()
-        {
-            foreach (var notification in Notifications)
-            {
-                SendMessageBg("1", notification);
             }
         }
 
@@ -652,7 +622,6 @@ namespace Win10Notifications
             if (_taskRegistration != null)
             {
                 NotifyUser("Background watcher already registered.", NotifyType.StatusMessage);
-                return;
             }
             // Applications registering for background trigger must request for permission.
             var backgroundAccessStatus = await BackgroundExecutionManager.RequestAccessAsync();
@@ -697,7 +666,6 @@ namespace Win10Notifications
             if (_historyTaskRegistration != null)
             {
                 NotifyUser("History background watcher already registered.", NotifyType.StatusMessage);
-                return;
             }
 
             builder = new BackgroundTaskBuilder { TaskEntryPoint = HistoryTaskEntryPoint };
@@ -874,11 +842,7 @@ namespace Win10Notifications
             // Make sure that the connection is still up and there is a message to send
             if (_socket != null)
             {
-                //_writer.WriteUInt32((uint)notifMessage.Length);
                 _writer.WriteString(notifMessage);
-
-                ConversationListBox.Items?.Add("Sent: " + notifMessage);
-                //WriteFile("Sent: " + notifMessage);
 
                 await _writer.StoreAsync();
             }
@@ -896,11 +860,9 @@ namespace Win10Notifications
                 // Make sure that the connection is still up and there is a message to send
                 if (_socket != null)
                 {
-                    //_writer.WriteUInt32((uint)notifMessage.Length);
                     _writer.WriteString(notifMessage);
 
                     ConversationListBox.Items?.Add("Sent: " + notifMessage);
-                    //WriteFile("Sent: " + notifMessage);
 
                     await _writer.StoreAsync();
                 }
@@ -908,32 +870,6 @@ namespace Win10Notifications
                 {
                     NotifyUser("No clients connected, please wait for a client to connect before attempting to send a notification", NotifyType.StatusMessage);
                 }
-            }
-        }
-
-        private void SendMessageBg(string type, UserNotification notification)
-        {
-            while (true)
-            {
-                var notifMessage = GetNotificationMessage(type, notification);
-
-                var previousMessage = (string) ApplicationData.Current.LocalSettings.Values["SendMessage"];
-
-                // Make sure previous message has been sent
-                if (string.IsNullOrEmpty(previousMessage))
-                {
-                    // Save the current message to local settings so the background task can pick it up. 
-                    ApplicationData.Current.LocalSettings.Values["SendMessage"] = notifMessage;
-
-                    ConversationListBox.Items?.Add("Sent: " + notifMessage);
-                    //WriteFile("Sent: " + notifMessage);
-                }
-                else
-                {
-                    // Do nothing until previous message has been sent.  
-                    continue;
-                }
-                break;
             }
         }
 
@@ -1142,10 +1078,7 @@ namespace Win10Notifications
                 await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                 {
                     NotifyUser("Client Connected: " + remoteDeviceName, NotifyType.StatusMessage);
-                    //CreateFile();
                     ConversationListBox.Items?.Add("Received: " + backgroundMessage);
-                    //WriteFile("Received: " + backgroundMessage);
-                    SendNotificationsOnConnectBg();
                 });
             }
         }
@@ -1193,7 +1126,6 @@ namespace Win10Notifications
             {
                 NotifyUser("Connected to Client: " + remoteDevice.Name, NotifyType.StatusMessage);
                 DisconnectButton.Content = "Disconnect from " + remoteDevice.Name;
-                //CreateFile();
                 if (_sendNotifications != null && (bool) _sendNotifications)
                 {
                     SendNotificationsOnConnect();
@@ -1230,7 +1162,6 @@ namespace Win10Notifications
                     await Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                     {
                         ConversationListBox.Items?.Add("Received: " + message);
-                        //WriteFile("Received: " + message);
                         var messageParts = message.Split(';');
 
                         if (messageParts[0] == "0")
