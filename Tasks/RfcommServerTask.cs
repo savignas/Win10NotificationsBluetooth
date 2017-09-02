@@ -329,7 +329,8 @@ namespace Tasks
                             LocalSettings.Values["newSettings"] = false;
                         }
 
-                        if (_notificationApps.All(x => x.Key != platNotif.AppInfo.AppUserModelId))
+                        if (_notificationApps.All(x => x.Key != platNotif.AppInfo.AppUserModelId) &&
+                            platNotif.AppInfo.PackageFamilyName != PackageFamilyName)
                         {
                             var notificationApp = new NotificationApp
                             {

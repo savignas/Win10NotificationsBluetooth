@@ -40,8 +40,15 @@ namespace Win10Notifications.Models
                     writer.Write(Key);
                     writer.Write(Name);
                     writer.Write(Value);
-                    writer.Write(IconData.Length);
-                    writer.Write(IconData);
+                    if (IconData == null)
+                    {
+                        writer.Write(0);
+                    }
+                    else
+                    {
+                        writer.Write(IconData.Length);
+                        writer.Write(IconData);
+                    }
                 }
                 return m.ToArray();
             }

@@ -326,7 +326,8 @@ namespace Win10Notifications
                             _localSettings.Values["newSettings"] = false;
                         }
 
-                        if (_notificationApps.All(x => x.Key != platNotif.AppInfo.AppUserModelId))
+                        if (_notificationApps.All(x => x.Key != platNotif.AppInfo.AppUserModelId) &&
+                            platNotif.AppInfo.PackageFamilyName != _packageFamilyName)
                         {
                             var notificationApp = new NotificationApp
                             {

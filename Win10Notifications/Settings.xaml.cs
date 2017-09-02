@@ -194,6 +194,7 @@ namespace Win10Notifications
             }
             catch (Exception)
             {
+                ListViewNotificationApps.ItemsSource = null;
                 _loaded = true;
             }
         }
@@ -234,7 +235,7 @@ namespace Win10Notifications
             }
         }
 
-        private void DeleteButton_Click(object sender, RoutedEventArgs e)
+        private void DeleteButton_Checked(object sender, RoutedEventArgs e)
         {
             var frameworkElement = sender as FrameworkElement;
             var button = sender as ToggleButton;
@@ -250,7 +251,7 @@ namespace Win10Notifications
             SaveButton.Visibility = Visibility.Visible;
         }
 
-        private void DeleteAllButton_Click(object sender, RoutedEventArgs e)
+        private void DeleteAllButton_Checked(object sender, RoutedEventArgs e)
         {
             var button = sender as ToggleButton;
             if (button?.IsChecked != null && (bool) button.IsChecked)
@@ -296,6 +297,8 @@ namespace Win10Notifications
             await FileIO.WriteBytesAsync(notificationApps, data.ToArray());
 
             _loaded = false;
+            DeleteAllButton.IsChecked = false;
+            ListViewNotificationApps.Background = new SolidColorBrush(Colors.Transparent);
             ReadNotificationApps();
 
             _localSettings.Values["newSettings"] = true;
