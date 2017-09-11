@@ -52,6 +52,7 @@ namespace Win10Notifications
         private IBackgroundTaskRegistration _taskRegistration;
         private IBackgroundTaskRegistration _notificationListenerTaskRegistration;
         private IBackgroundTaskRegistration _historyTaskRegistration;
+        private IBackgroundTaskRegistration _toastTaskRegistration;
         // The watcher trigger used to configure the background task registration 
         private readonly RfcommConnectionTrigger _trigger;
         // A name is given to the task in order for it to be identifiable across context. 
@@ -61,12 +62,16 @@ namespace Win10Notifications
 
         private const string HistoryTaskName = "ToastNotificationHistoryChangedTriggerTask";
 
+        private const string ToastTaskName = "ToastNotificationsActionTriggerTask";
+
         // Entry point for the background task. 
         private const string TaskEntryPoint = "Tasks.RfcommServerTask";
 
         private const string NotificationListenerTaskEntryPoint = "Tasks.NotificationListenerTask";
 
         private const string HistoryTaskEntryPoint = "Tasks.ToastNotificationHistoryChangedTriggerTask";
+
+        private const string ToastTaskEntryPoint = "Tasks.ToastNotificationActionTriggerTask";
 
         // Define the raw bytes that are converted into SDP record
         private readonly byte[] _sdpRecordBlob = {
@@ -671,7 +676,7 @@ namespace Win10Notifications
 
             builder = new BackgroundTaskBuilder { TaskEntryPoint = HistoryTaskEntryPoint };
             builder.SetTrigger(new ToastNotificationHistoryChangedTrigger());
-            builder.Name = TaskName;
+            builder.Name = HistoryTaskName;
 
             try
             {
@@ -693,6 +698,45 @@ namespace Win10Notifications
             catch (Exception)
             {
                 NotifyUser("History background task not registered",
+                    NotifyType.ErrorMessage);
+            }
+
+            foreach (var task in BackgroundTaskRegistration.AllTasks)
+            {
+                if (task.Value.Name != ToastTaskName) continue;
+                _toastTaskRegistration = task.Value;
+                break;
+            }
+
+            if (_toastTaskRegistration != null)
+            {
+                NotifyUser("Toast background watcher already registered.", NotifyType.StatusMessage);
+            }
+
+            builder = new BackgroundTaskBuilder { TaskEntryPoint = ToastTaskEntryPoint };
+            builder.SetTrigger(new ToastNotificationActionTrigger());
+            builder.Name = ToastTaskName;
+
+            try
+            {
+                _toastTaskRegistration = builder.Register();
+
+                // Even though the trigger is registered successfully, it might be blocked. Notify the user if that is the case.
+                if (backgroundAccessStatus == BackgroundAccessStatus.AlwaysAllowed ||
+                    backgroundAccessStatus == BackgroundAccessStatus.AllowedSubjectToSystemPolicy)
+                {
+                    NotifyUser("Toast background watcher registered.", NotifyType.StatusMessage);
+                    // Registering a background trigger if it is not already registered. Rfcomm Chat Service will now be advertised in the SDP record
+                    // First get the existing tasks to see if we already registered for it
+                }
+                else
+                {
+                    NotifyUser("Background tasks may be disabled for this app", NotifyType.ErrorMessage);
+                }
+            }
+            catch (Exception)
+            {
+                NotifyUser("Toast background task not registered",
                     NotifyType.ErrorMessage);
             }
 
@@ -1040,6 +1084,19 @@ namespace Win10Notifications
                     _historyTaskRegistration.Unregister(true);
                     _historyTaskRegistration = null;
                     NotifyUser("History background watcher unregistered.", NotifyType.StatusMessage);
+                }
+                else
+                {
+                    // At this point we assume we haven't found any existing tasks matching the one we want to unregister
+                    NotifyUser("No registered background watcher found.", NotifyType.StatusMessage);
+                }
+                // Unregistering the background task will remove the Rfcomm Chat Service from the SDP record and stop listening for incoming connections
+                // First get the existing tasks to see if we already registered for it
+                if (_toastTaskRegistration != null)
+                {
+                    _toastTaskRegistration.Unregister(true);
+                    _toastTaskRegistration = null;
+                    NotifyUser("Toast background watcher unregistered.", NotifyType.StatusMessage);
                 }
                 else
                 {

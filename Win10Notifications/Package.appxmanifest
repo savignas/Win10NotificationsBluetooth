@@ -21,7 +21,12 @@
         <uap:SplashScreen Image="Assets\SplashScreen.png" />
       </uap:VisualElements>
       <Extensions>
-        <Extension Category="windows.backgroundTasks" EntryPoint="Tasks.ToastNotificationHistoryChangedTriggerTask">
+        <Extension Category="windows.backgroundTasks" EntryPoint="Tasks.ToastNotificationActionTriggerTask">
+          <BackgroundTasks>
+            <Task Type="systemEvent" />
+          </BackgroundTasks>
+        </Extension>
+        <Extension Category="windows.backgroundTasks" EntryPoint="Tasks.NotificationListenerTask">
           <BackgroundTasks>
             <Task Type="systemEvent" />
           </BackgroundTasks>
@@ -31,7 +36,7 @@
             <Task Type="bluetooth" />
           </BackgroundTasks>
         </Extension>
-        <Extension Category="windows.backgroundTasks" EntryPoint="Tasks.NotificationListenerTask">
+        <Extension Category="windows.backgroundTasks" EntryPoint="Tasks.ToastNotificationHistoryChangedTriggerTask">
           <BackgroundTasks>
             <Task Type="systemEvent" />
           </BackgroundTasks>

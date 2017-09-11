@@ -151,14 +151,42 @@ namespace Tasks
                     }
                 }
             };
-            var toastContent = new ToastContent
+            var toastContent = new ToastContent();
+            if (key.StartsWith("+"))
             {
-                Visual = visual
-            };
+                toastContent.Visual = visual;
+                toastContent.Actions = new ToastActionsCustom()
+                {
+                    Inputs =
+                    {
+                        new ToastTextBox("tbReply")
+                        {
+                            PlaceholderContent = "Type a reply..."
+                        }
+                    },
+                    Buttons =
+                    {
+                        new ToastButton("Reply", key)
+                        {
+                            ActivationType = ToastActivationType.Background,
+                            TextBoxId = "tbReply"
+                        }
+                    }
+                };
+            }
+            else
+            {
+                toastContent.Visual = visual;
+            }
 
             var toast = new ToastNotification(toastContent.GetXml()) { Tag = key };
             ToastNotificationManager.CreateToastNotifier().Show(toast);
             AndroidNotifications.Add(toast);
+        }
+
+        public static void SendSms(string phoneNumber, string text) 
+        {
+            SendMessages.Enqueue("0;" + phoneNumber + ";" + text);
         }
 
         private async Task ReceiveDataAsync()
