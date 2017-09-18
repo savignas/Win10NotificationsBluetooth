@@ -105,6 +105,7 @@
     <ErrorReport>prompt</ErrorReport>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Models\AndroidNotification.cs" />
     <Compile Include="Models\NotificationApp.cs" />
     <Compile Include="NotificationListenerTask.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

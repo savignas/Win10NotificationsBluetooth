@@ -1,4 +1,5 @@
-﻿using Windows.ApplicationModel.Background;
+﻿using System;
+using Windows.ApplicationModel.Background;
 using Windows.Storage;
 
 namespace Tasks
@@ -9,7 +10,7 @@ namespace Tasks
         private IBackgroundTaskInstance _taskInstance;
         private BackgroundTaskCancellationReason _cancelReason = BackgroundTaskCancellationReason.Abort;
 
-        public void Run(IBackgroundTaskInstance taskInstance)
+        public async void Run(IBackgroundTaskInstance taskInstance)
         {
             // Get the deferral to prevent the task from closing prematurely
             _deferral = taskInstance.GetDeferral();
@@ -21,7 +22,7 @@ namespace Tasks
             // Store a setting so that the app knows that the task is running. 
             ApplicationData.Current.LocalSettings.Values["IsNotificationListenerActive"] = true;
 
-            RfcommServerTask.UpdateNotifications();
+            await RfcommServerTask.UpdateNotifications();
 
             ApplicationData.Current.LocalSettings.Values["IsNotificationListenerActive"] = false;
             _deferral.Complete();

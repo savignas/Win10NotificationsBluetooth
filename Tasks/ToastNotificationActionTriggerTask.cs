@@ -12,16 +12,12 @@ namespace Tasks
     {
         public void Run(IBackgroundTaskInstance taskInstance)
         {
-            var deferral = taskInstance.GetDeferral();
-
             if (!(taskInstance.TriggerDetails is ToastNotificationActionTriggerDetail details)) return;
             var arguments = details.Argument;
             var userInput = details.UserInput.Values;
             var text = (string) userInput.First();
 
             RfcommServerTask.SendSms(arguments, text);
-
-            deferral.Complete();
         }
     }
 }

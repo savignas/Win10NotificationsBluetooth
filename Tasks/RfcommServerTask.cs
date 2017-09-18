@@ -33,7 +33,7 @@ namespace Tasks
 
         private static UserNotificationListener _listener;
         private static ObservableCollection<UserNotification> Notifications { get; } = new ObservableCollection<UserNotification>();
-        private static ObservableCollection<ToastNotification> AndroidNotifications { get; } = new ObservableCollection<ToastNotification>();
+        private static List<AndroidNotification> AndroidNotifications { get; } = new List<AndroidNotification>();
 
         private BackgroundTaskDeferral _deferral;
         private IBackgroundTaskInstance _taskInstance;
@@ -113,7 +113,7 @@ namespace Tasks
                 Debug.WriteLine("Exception occurred while initializing the connection, hr = " + ex.HResult.ToString("X"));
             }
 
-            UpdateNotifications();
+            await UpdateNotifications();
         }
 
         private void OnCanceled(IBackgroundTaskInstance taskInstance, BackgroundTaskCancellationReason reason)
@@ -128,8 +128,28 @@ namespace Tasks
             _deferral.Complete();
         }
 
-        public void ShowNotification(string appName, string title, string content, string key)
+        public void ShowNotification(string appName, string packageName, string title, string content, string key)
         {
+            var index = AndroidNotifications.FindIndex(n => n.Key == key);
+            if (index != -1)
+            {
+                //content = AndroidNotifications[index].Content + "\n" + content;
+                AndroidNotifications[index].Content = content;
+            }
+            else
+            {
+                var androidNotification = new AndroidNotification
+                {
+                    AppName = appName,
+                    Content = content,
+                    Key = key,
+                    PackageName = packageName,
+                    Title = title
+                };
+                AndroidNotifications.Add(androidNotification);
+                index = AndroidNotifications.IndexOf(androidNotification);
+            }
+
             var visual = new ToastVisual
             {
                 BindingGeneric = new ToastBindingGeneric
@@ -144,6 +164,7 @@ namespace Tasks
                         {
                             Text = content
                         }
+
                     },
                     Attribution = new ToastGenericAttributionText()
                     {
@@ -151,11 +172,15 @@ namespace Tasks
                     }
                 }
             };
-            var toastContent = new ToastContent();
+            var header = new ToastHeader(packageName, appName, "");
+            var toastContent = new ToastContent
+            {
+                Header = header,
+                Visual = visual
+            };
             if (key.StartsWith("+"))
             {
-                toastContent.Visual = visual;
-                toastContent.Actions = new ToastActionsCustom()
+                toastContent.Actions = new ToastActionsCustom
                 {
                     Inputs =
                     {
@@ -174,14 +199,12 @@ namespace Tasks
                     }
                 };
             }
-            else
-            {
-                toastContent.Visual = visual;
-            }
 
-            var toast = new ToastNotification(toastContent.GetXml()) { Tag = key };
+            var toast = new ToastNotification(toastContent.GetXml())
+            {
+                Tag = index.ToString()
+            };
             ToastNotificationManager.CreateToastNotifier().Show(toast);
-            AndroidNotifications.Add(toast);
         }
 
         public static void SendSms(string phoneNumber, string text) 
@@ -215,30 +238,46 @@ namespace Tasks
 
                     var messageParts = message.Split(';');
 
-                    if (messageParts[0] == "0")
+                    switch (messageParts[0])
                     {
-                        try
-                        {
-                            RemoveNotification(uint.Parse(messageParts[1]));
-                        }
-                        catch (Exception)
-                        {
-                            ToastNotificationManager.History.Remove(messageParts[1]);
-                        }
-                    }
-                    else if (messageParts[0] == "1")
-                    {
-                        ShowNotification(messageParts[2], messageParts[3], messageParts[4], messageParts[1]);
+                        case "0":
+                            try
+                            {
+                                await RemoveNotification(uint.Parse(messageParts[1]));
+                            }
+                            catch (Exception)
+                            {
+                                var index = AndroidNotifications.FindIndex(n => n.Key == messageParts[1]);
+                                if (index != -1)
+                                {
+                                    ToastNotificationManager.History.Remove(index.ToString());
+                                    AndroidNotifications.RemoveAt(index);
+                                }
+                            }
+                            break;
+                        case "1":
+                            if (messageParts[1].StartsWith("+"))
+                            {
+                                ShowNotification("SMS", "sms", messageParts[2], messageParts[3], messageParts[1]);
+                            }
+                            else
+                            {
+                                ShowNotification(messageParts[2], messageParts[3], messageParts[4], messageParts[5],
+                                    messageParts[1]);
+                            }
+                            break;
                     }
 
                     LocalSettings.Values["ReceivedMessage"] = message;
                     _taskInstance.Progress += 1;
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // ignored
+                LocalSettings.Values["TaskCancelationReason"] = ex.Message;
+                _deferral.Complete();
             }
+            
         }
 
         /// <summary>
@@ -265,7 +304,7 @@ namespace Tasks
                     // Make sure that the connection is still up and there is a message to send
                     if (_socket != null)
                     {
-                        //writer.WriteUInt32((uint)message.Length);
+                        if (message == null) return;
                         _writer.WriteString(message);
                         await _writer.StoreAsync();
                     }
@@ -292,117 +331,120 @@ namespace Tasks
             }
         }
 
-        public static async void UpdateNotifications()
+        public static IAsyncAction UpdateNotifications()
         {
-            try
+            return Task.Run(async () =>
             {
-                // Get the toast notifications
-                var notifsInPlatform = await _listener.GetNotificationsAsync(NotificationKinds.Toast);
-
-                // Reverse their order since the platform returns them with oldest first, we want newest first
-                notifsInPlatform = notifsInPlatform.Reverse().ToList();
-
-                // First remove any notifications that no longer exist
-                for (var i = 0; i < Notifications.Count; i++)
+                try
                 {
-                    var existingNotif = Notifications[i];
+                    // Get the toast notifications
+                    var notifsInPlatform = await _listener.GetNotificationsAsync(NotificationKinds.Toast);
 
-                    // If not in platform anymore, remove from our list
-                    if (notifsInPlatform.Any(n => n.Id == existingNotif.Id)) continue;
-                    Notifications.RemoveAt(i);
-                    i--;
+                    // Reverse their order since the platform returns them with oldest first, we want newest first
+                    notifsInPlatform = notifsInPlatform.Reverse().ToList();
 
-                    if ((bool) LocalSettings.Values["IsBackgroundTaskActive"] &&
-                        existingNotif.AppInfo.PackageFamilyName != PackageFamilyName)
+                    // First remove any notifications that no longer exist
+                    for (var i = 0; i < Notifications.Count; i++)
                     {
-                        SendMessageBg("0", existingNotif);
+                        var existingNotif = Notifications[i];
+
+                        // If not in platform anymore, remove from our list
+                        if (notifsInPlatform.Any(n => n.Id == existingNotif.Id)) continue;
+                        Notifications.RemoveAt(i);
+                        i--;
+
+                        if ((bool)LocalSettings.Values["IsBackgroundTaskActive"] &&
+                            existingNotif.AppInfo.PackageFamilyName != PackageFamilyName)
+                        {
+                            SendMessageBg("0", existingNotif);
+                        }
+                    }
+
+                    // Now our list only contains notifications that exist,
+                    // but it might be missing new notifications.
+
+                    for (var i = 0; i < notifsInPlatform.Count; i++)
+                    {
+                        var platNotif = notifsInPlatform[i];
+
+                        var indexOfExisting = FindIndexOfNotification(platNotif.Id);
+
+                        // If we have an existing
+                        if (indexOfExisting != -1)
+                        {
+                            // And if it's in the wrong position
+                            if (i == indexOfExisting) continue;
+                            // Move it to the right position
+                            Notifications.Move(indexOfExisting, i);
+
+                            if ((bool)LocalSettings.Values["IsBackgroundTaskActive"] &&
+                                platNotif.AppInfo.PackageFamilyName != PackageFamilyName)
+                            {
+                                SendMessageBg("2", platNotif);
+                            }
+
+                            // Otherwise, leave it in its place
+                        }
+
+                        // Otherwise, notification is new
+                        else
+                        {
+                            // Insert at that position
+                            Notifications.Insert(i, platNotif);
+
+                            if (LocalSettings.Values["newSettings"] != null && (bool)LocalSettings.Values["newSettings"])
+                            {
+                                _oldData = await ReadNotificationApps();
+                                LocalSettings.Values["newSettings"] = false;
+                            }
+
+                            if (_notificationApps.All(x => x.Key != platNotif.AppInfo.AppUserModelId) &&
+                                platNotif.AppInfo.PackageFamilyName != PackageFamilyName)
+                            {
+                                var notificationApp = new NotificationApp
+                                {
+                                    Key = platNotif.AppInfo.AppUserModelId,
+                                    Name = platNotif.AppInfo.DisplayInfo.DisplayName,
+                                    Allowed = true
+                                };
+                                var stream = Stream.Null;
+                                try
+                                {
+                                    var icon = await platNotif.AppInfo.DisplayInfo.GetLogo(new Size(16, 16)).OpenReadAsync();
+                                    stream = icon.AsStreamForRead();
+                                }
+                                catch (Exception)
+                                {
+                                    // ignored
+                                }
+                                var buffer = new byte[stream.Length];
+                                await stream.ReadAsync(buffer, 0, buffer.Length);
+                                notificationApp.IconData = buffer;
+                                _notificationApps.Add(notificationApp);
+
+                                var newData = notificationApp.Serialize();
+
+                                var data = new byte[_oldData.Length + newData.Length];
+                                System.Buffer.BlockCopy(_oldData, 0, data, 0, _oldData.Length);
+                                System.Buffer.BlockCopy(newData, 0, data, _oldData.Length, newData.Length);
+
+                                await FileIO.WriteBytesAsync(_notificationAppsFile, data);
+                            }
+
+                            if ((bool)LocalSettings.Values["IsBackgroundTaskActive"] &&
+                                platNotif.AppInfo.PackageFamilyName != PackageFamilyName &&
+                                _notificationApps.Any(x => x.Key == platNotif.AppInfo.AppUserModelId && x.Allowed))
+                            {
+                                SendMessageBg("1", platNotif);
+                            }
+                        }
                     }
                 }
-
-                // Now our list only contains notifications that exist,
-                // but it might be missing new notifications.
-
-                for (var i = 0; i < notifsInPlatform.Count; i++)
+                catch (Exception)
                 {
-                    var platNotif = notifsInPlatform[i];
-
-                    var indexOfExisting = FindIndexOfNotification(platNotif.Id);
-
-                    // If we have an existing
-                    if (indexOfExisting != -1)
-                    {
-                        // And if it's in the wrong position
-                        if (i == indexOfExisting) continue;
-                        // Move it to the right position
-                        Notifications.Move(indexOfExisting, i);
-
-                        if ((bool) LocalSettings.Values["IsBackgroundTaskActive"] &&
-                            platNotif.AppInfo.PackageFamilyName != PackageFamilyName)
-                        {
-                            SendMessageBg("2", platNotif);
-                        }
-
-                        // Otherwise, leave it in its place
-                    }
-
-                    // Otherwise, notification is new
-                    else
-                    {
-                        // Insert at that position
-                        Notifications.Insert(i, platNotif);
-
-                        if (LocalSettings.Values["newSettings"] != null && (bool)LocalSettings.Values["newSettings"])
-                        {
-                            _oldData = await ReadNotificationApps();
-                            LocalSettings.Values["newSettings"] = false;
-                        }
-
-                        if (_notificationApps.All(x => x.Key != platNotif.AppInfo.AppUserModelId) &&
-                            platNotif.AppInfo.PackageFamilyName != PackageFamilyName)
-                        {
-                            var notificationApp = new NotificationApp
-                            {
-                                Key = platNotif.AppInfo.AppUserModelId,
-                                Name = platNotif.AppInfo.DisplayInfo.DisplayName,
-                                Allowed = true
-                            };
-                            var stream = Stream.Null;
-                            try
-                            {
-                                var icon = await platNotif.AppInfo.DisplayInfo.GetLogo(new Size(16, 16)).OpenReadAsync();
-                                stream = icon.AsStreamForRead();
-                            }
-                            catch (Exception)
-                            {
-                                // ignored
-                            }
-                            var buffer = new byte[stream.Length];
-                            await stream.ReadAsync(buffer, 0, buffer.Length);
-                            notificationApp.IconData = buffer;
-                            _notificationApps.Add(notificationApp);
-
-                            var newData = notificationApp.Serialize();
-
-                            var data = new byte[_oldData.Length + newData.Length];
-                            System.Buffer.BlockCopy(_oldData, 0, data, 0, _oldData.Length);
-                            System.Buffer.BlockCopy(newData, 0, data, _oldData.Length, newData.Length);
-
-                            await FileIO.WriteBytesAsync(_notificationAppsFile, data);
-                        }
-
-                        if ((bool) LocalSettings.Values["IsBackgroundTaskActive"] &&
-                            platNotif.AppInfo.PackageFamilyName != PackageFamilyName &&
-                            _notificationApps.Any(x => x.Key == platNotif.AppInfo.AppUserModelId && x.Allowed))
-                        {
-                            SendMessageBg("1", platNotif);
-                        }
-                    }
+                    // ignored
                 }
-            }
-            catch (Exception)
-            {
-                // ignored
-            }
+            }).AsAsyncAction();
         }
 
         public static void DismissAndroidNotification()
@@ -410,16 +452,15 @@ namespace Tasks
             var androidNotificationHistory = ToastNotificationManager.History.GetHistory();
             for (var i = 0; i < AndroidNotifications.Count; i++)
             {
-                var existingAndroidNotif = AndroidNotifications[i];
+                if (androidNotificationHistory.Any(n => n.Tag == i.ToString())) continue;
 
-                if (androidNotificationHistory.Any(n => n.Tag == existingAndroidNotif.Tag)) continue;
+                if ((bool)LocalSettings.Values["IsBackgroundTaskActive"])
+                {
+                    SendMessages.Enqueue("0;" + AndroidNotifications[i].Key);
+                }
+
                 AndroidNotifications.RemoveAt(i);
                 i--;
-
-                if ((bool) LocalSettings.Values["IsBackgroundTaskActive"])
-                {
-                    SendMessages.Enqueue("0;" + existingAndroidNotif.Tag);
-                }
             }
         }
 
@@ -489,7 +530,7 @@ namespace Tasks
             return -1;
         }
 
-        public void RemoveNotification(uint notifId)
+        private static async Task RemoveNotification(uint notifId)
         {
             try
             {
@@ -501,7 +542,7 @@ namespace Tasks
                 // ignored
             }
 
-            UpdateNotifications();
+            await UpdateNotifications();
         }
 
         private static void SendMessageBg(string type, UserNotification notification)
