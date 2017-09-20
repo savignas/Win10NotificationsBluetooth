@@ -133,7 +133,6 @@ namespace Tasks
             var index = AndroidNotifications.FindIndex(n => n.Key == key);
             if (index != -1)
             {
-                //content = AndroidNotifications[index].Content + "\n" + content;
                 AndroidNotifications[index].Content = content;
             }
             else
@@ -180,24 +179,53 @@ namespace Tasks
             };
             if (key.StartsWith("+"))
             {
-                toastContent.Actions = new ToastActionsCustom
+                if (key.EndsWith("sms"))
                 {
-                    Inputs =
+                    toastContent.Actions = new ToastActionsCustom
                     {
-                        new ToastTextBox("tbReply")
+                        Inputs =
                         {
-                            PlaceholderContent = "Type a reply..."
+                            new ToastTextBox("tbReply")
+                            {
+                                PlaceholderContent = "Type a reply..."
+                            }
+                        },
+                        Buttons =
+                        {
+                            new ToastButton("Reply", key)
+                            {
+                                ActivationType = ToastActivationType.Background,
+                                TextBoxId = "tbReply"
+                            }
                         }
-                    },
-                    Buttons =
+                    };
+                }
+                else if (key.EndsWith("call"))
+                {
+                    toastContent.Actions = new ToastActionsCustom
                     {
-                        new ToastButton("Reply", key)
+                        Inputs =
                         {
-                            ActivationType = ToastActivationType.Background,
-                            TextBoxId = "tbReply"
+                            new ToastTextBox("tbReply")
+                            {
+                                PlaceholderContent = "Type a reply..."
+                            }
+                        },
+                        Buttons =
+                        {
+                            new ToastButton("Reply", key)
+                            {
+                                ActivationType = ToastActivationType.Background,
+                                TextBoxId = "tbReply"
+                            },
+                            new ToastButtonDismiss("Dismiss Call")
                         }
-                    }
-                };
+                    };
+                }
+                if (key.EndsWith("call"))
+                {
+                    toastContent.Scenario = ToastScenario.IncomingCall;
+                }
             }
 
             var toast = new ToastNotification(toastContent.GetXml())
@@ -258,7 +286,14 @@ namespace Tasks
                         case "1":
                             if (messageParts[1].StartsWith("+"))
                             {
-                                ShowNotification("SMS", "sms", messageParts[2], messageParts[3], messageParts[1]);
+                                if (messageParts[1].EndsWith("sms"))
+                                {
+                                    ShowNotification("SMS", "sms", messageParts[2], messageParts[3], messageParts[1]);
+                                }
+                                else if (messageParts[1].EndsWith("call"))
+                                {
+                                    ShowNotification("Incoming call", "call", messageParts[2], "Calling...", messageParts[1]);
+                                }
                             }
                             else
                             {
