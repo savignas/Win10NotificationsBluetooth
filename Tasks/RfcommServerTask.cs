@@ -57,6 +57,7 @@ namespace Tasks
         private static byte[] _oldData;
 
         private static readonly Queue<string> SendMessages = new Queue<string>();
+
         /// <inheritdoc />
         /// <summary>
         /// The entry point of a background task.

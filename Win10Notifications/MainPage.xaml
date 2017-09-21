@@ -73,7 +73,7 @@
                                     <ColumnDefinition />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                                <ToggleSwitch Grid.Column="1" IsOn="{Binding IsRadioOn, Mode=TwoWay}" IsEnabled="{Binding IsEnabled}" VerticalAlignment="Center" IsEnabledChanged="Toggle_IsEnabledChanged"/>
+                                <ToggleSwitch Grid.Column="1" IsOn="{Binding IsRadioOn, Mode=TwoWay}" IsEnabled="{Binding IsEnabled}" VerticalAlignment="Center"/>
                             </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -89,9 +89,6 @@
                 </ScrollViewer>
             </Grid>
             <CommandBar Grid.Row="1" Margin="10,0,10,0">
-                <AppBarButton Name="ListenButton" Icon="Play" Label="Start FG" Click="ListenButton_Click"/>
-                <AppBarButton x:Name="DisconnectButton" Icon="Stop" Label="Stop FG" Click="DisconnectButton_Click" IsEnabled="False"/>
-                <AppBarSeparator/>
                 <AppBarButton x:Name="DisconnectButtonBg" Icon="Stop" Label="Stop BG" Click="DisconnectButtonBg_Click"/>
 
                 <CommandBar.SecondaryCommands>
