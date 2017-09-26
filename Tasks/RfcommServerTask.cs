@@ -95,6 +95,8 @@ namespace Tasks
 
                     _writer = new DataWriter(_socket.OutputStream);
                     _reader = new DataReader(_socket.InputStream);
+					
+					await UpdateNotifications();
                 }
                 else
                 {
@@ -113,8 +115,6 @@ namespace Tasks
 
                 Debug.WriteLine("Exception occurred while initializing the connection, hr = " + ex.HResult.ToString("X"));
             }
-
-            await UpdateNotifications();
         }
 
         private void OnCanceled(IBackgroundTaskInstance taskInstance, BackgroundTaskCancellationReason reason)

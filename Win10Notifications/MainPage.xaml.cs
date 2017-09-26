@@ -17,9 +17,9 @@ using Windows.UI.Notifications.Management;
 using Windows.UI.Popups;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Navigation;
 using Win10Notifications.Models;
+using Win32;
 
 // The Blank Page item template is documented at http://go.microsoft.com/fwlink/?LinkId=402352&clcid=0x409
 
@@ -97,7 +97,7 @@ namespace Win10Notifications
             // The SDP record is nice in order to populate optional name and description fields
             _trigger.InboundConnection.SdpRecord = _sdpRecordBlob.AsBuffer();
 
-            
+            InitializeSongTitleTimer();
         }
 
         protected override void OnNavigatedTo(NavigationEventArgs e)
@@ -115,6 +115,83 @@ namespace Win10Notifications
                     AppViewBackButtonVisibility.Collapsed;
             }
 
+        }
+
+        private void InitializeSongTitleTimer()
+        {
+            var songTitleTimer = new DispatcherTimer {Interval = TimeSpan.FromMilliseconds(500)};
+            songTitleTimer.Tick += SongTitleTimer_Tick;
+            songTitleTimer.Start();
+        }
+
+        private void SongTitleTimer_Tick(object sender, object e)
+        {
+            var winamp = Winamp.GetSongTitle();
+            var spotify = Spotify.GetSongTitle();
+
+            if (winamp != null && spotify != null)
+            {
+                var preferedMusicPlayer = (string) _localSettings.Values["preferedMusicPlayer"];
+                switch (preferedMusicPlayer)
+                {
+                    case null:
+                        if (WinampButton.IsChecked != null && (bool) WinampButton.IsChecked)
+                        {
+                            WinampButton.IsChecked = false;
+                            SpotifyButton.IsChecked = true;
+                        }
+                        else if (SpotifyButton.IsChecked != null && (bool) SpotifyButton.IsChecked)
+                        {
+                            WinampButton.IsChecked = true;
+                            SpotifyButton.IsChecked = false;
+                        }
+                        else
+                        {
+                            WinampButton.IsChecked = false;
+                            SpotifyButton.IsChecked = true;
+                        }
+                        break;
+                    case "Winamp":
+                        StatusBlock.Text = winamp;
+                        WinampButton.IsChecked = true;
+                        SpotifyButton.IsCompact = false;
+                        break;
+                    case "Spotify":
+                        StatusBlock.Text = spotify;
+                        WinampButton.IsChecked = false;
+                        SpotifyButton.IsChecked = true;
+                        break;
+                    default:
+                        StatusBlock.Text = string.Empty;
+                        break;
+                }
+                WinampButton.Visibility = Visibility.Visible;
+                SpotifyButton.Visibility = Visibility.Visible;
+            }
+            else if (spotify != null)
+            {
+                StatusBlock.Text = spotify;
+                WinampButton.IsChecked = false;
+                SpotifyButton.IsChecked = true;
+                WinampButton.Visibility = Visibility.Collapsed;
+                SpotifyButton.Visibility = Visibility.Visible;
+            }
+            else if (winamp != null)
+            {
+                StatusBlock.Text = winamp;
+                WinampButton.IsChecked = true;
+                SpotifyButton.IsChecked = false;
+                WinampButton.Visibility = Visibility.Visible;
+                SpotifyButton.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                StatusBlock.Text = "No music";
+                WinampButton.IsChecked = false;
+                SpotifyButton.IsChecked = false;
+                WinampButton.Visibility = Visibility.Collapsed;
+                SpotifyButton.Visibility = Visibility.Collapsed;
+            }
         }
 
         private void ListViewNotifications_ItemClick(object sender, ItemClickEventArgs e)
@@ -501,7 +578,7 @@ namespace Win10Notifications
         /// <param name="type"></param>
         public void NotifyUser(string strMessage, NotifyType type)
         {
-            switch (type)
+            /*switch (type)
             {
                 case NotifyType.StatusMessage:
                     StatusBorder.Background = new SolidColorBrush(Windows.UI.Colors.Green);
@@ -515,7 +592,7 @@ namespace Win10Notifications
             StatusBlock.Text = strMessage;
 
             // Collapse the StatusBlock if it has no text to conserve real estate.
-            StatusBorder.Visibility = StatusBlock.Text != string.Empty ? Visibility.Visible : Visibility.Collapsed;
+            StatusBorder.Visibility = StatusBlock.Text != string.Empty ? Visibility.Visible : Visibility.Collapsed;*/
         }
 
         public enum NotifyType
@@ -608,6 +685,37 @@ namespace Win10Notifications
         private void SettingsButton_Click(object sender, RoutedEventArgs e)
         {
             Frame.Navigate(typeof(Settings));
+        }
+
+        private void NextTrackButton_OnClick(object sender, RoutedEventArgs e)
+        {
+            Winamp.NextTrack();
+        }
+
+        private void StopButton_OnClick(object sender, RoutedEventArgs e)
+        {
+            Winamp.Stop();
+        }
+
+        private void PauseButton_OnClick(object sender, RoutedEventArgs e)
+        {
+            Winamp.Pause();
+        }
+
+        private void PlayButton_OnClick(object sender, RoutedEventArgs e)
+        {
+            Winamp.Play();
+        }
+
+        private void PreviousTrackButton_OnClick(object sender, RoutedEventArgs e)
+        {
+            Winamp.PreviousTrack();
+        }
+
+        private void MusicPlayerButton_OnChecked(object sender, RoutedEventArgs e)
+        {
+            var musicPlayerButton = (AppBarToggleButton) sender;
+            _localSettings.Values["preferedMusicPlayer"] = musicPlayerButton.Label;
         }
     }
 }

@@ -89,9 +89,17 @@
                 </ScrollViewer>
             </Grid>
             <CommandBar Grid.Row="1" Margin="10,0,10,0">
-                <AppBarButton x:Name="DisconnectButtonBg" Icon="Stop" Label="Stop BG" Click="DisconnectButtonBg_Click"/>
+                <AppBarButton x:Name="PreviousTrackButton" Icon="Previous" Label="Previous Track" Click="PreviousTrackButton_OnClick"/>
+                <AppBarButton x:Name="PlayButton" Icon="Play" Label="Play" Click="PlayButton_OnClick"/>
+                <AppBarButton x:Name="PauseButton" Icon="Pause" Label="Pause" Click="PauseButton_OnClick"/>
+                <AppBarButton x:Name="StopButton" Icon="Stop" Label="Stop" Click="StopButton_OnClick"/>
+                <AppBarButton x:Name="NextTrackButton" Icon="Next" Label="Next Track" Click="NextTrackButton_OnClick"/>
+                <AppBarSeparator/>
+                <AppBarButton x:Name="DisconnectButtonBg" Icon="Cancel" Label="Stop BG" Click="DisconnectButtonBg_Click"/>
 
                 <CommandBar.SecondaryCommands>
+                    <AppBarToggleButton Name="WinampButton" Label="Winamp" Visibility="Collapsed" Checked="MusicPlayerButton_OnChecked"/>
+                    <AppBarToggleButton Name="SpotifyButton" Label="Spotify" Visibility="Collapsed" Checked="MusicPlayerButton_OnChecked"/>
                     <AppBarButton Name="SettingsButton" Icon="Setting" Label="Settings" Click="SettingsButton_Click" />
                 </CommandBar.SecondaryCommands>
 
