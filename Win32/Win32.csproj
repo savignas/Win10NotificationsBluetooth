@@ -109,7 +109,6 @@
     <RestoreProjectStyle>PackageReference</RestoreProjectStyle>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Spotify.cs" />
     <Compile Include="Winamp.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

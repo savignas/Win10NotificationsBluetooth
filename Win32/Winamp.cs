@@ -6,7 +6,7 @@ namespace Win32
     public sealed class Winamp
     {
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-        private static extern IntPtr FindWindow(string lpClassName,
+        private static extern IntPtr FindWindowW(string lpClassName,
             string lpWindowName);
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
@@ -15,7 +15,7 @@ namespace Win32
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         private static extern IntPtr SendMessageW(IntPtr hwnd,
-            int msg, int wParam, int lParam);
+            uint msg, int wParam, int lParam);
 
         private const string LpClassName = "Winamp v1.x";
         private const string StrTtlEnd = " - Winamp";
@@ -29,7 +29,7 @@ namespace Win32
 
         public static string GetSongTitle()
         {
-            var hwnd = FindWindow(LpClassName, null);
+            var hwnd = FindWindowW(LpClassName, null);
 
             if (hwnd.Equals(IntPtr.Zero)) return null;
 
@@ -81,7 +81,7 @@ namespace Win32
 
         private static void Command(int msg)
         {
-            var hwnd = FindWindow(LpClassName, null);
+            var hwnd = FindWindowW(LpClassName, null);
             SendMessageW(hwnd, WmCommand, msg, 0);
         }
 

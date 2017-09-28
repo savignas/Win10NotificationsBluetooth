@@ -15,10 +15,12 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
+using System.Text.RegularExpressions;
 using Windows.ApplicationModel;
 using Windows.Foundation;
 using Microsoft.Toolkit.Uwp.Notifications;
 using Tasks.Models;
+using Win32;
 
 namespace Tasks
 {
@@ -40,7 +42,8 @@ namespace Tasks
         private BackgroundTaskCancellationReason _cancelReason = BackgroundTaskCancellationReason.Abort;
         private bool _cancelRequested;
 
-        ThreadPoolTimer _periodicTimer;
+        private ThreadPoolTimer _periodicTimer;
+        private ThreadPoolTimer _songTitleTimer;
 
         private static readonly string PackageFamilyName = Package.Current.Id.FamilyName;
 
@@ -57,6 +60,8 @@ namespace Tasks
         private static byte[] _oldData;
 
         private static readonly Queue<string> SendMessages = new Queue<string>();
+
+        private static string _songTitle;
 
         /// <inheritdoc />
         /// <summary>
@@ -77,6 +82,9 @@ namespace Tasks
             LocalSettings.Values["IsBackgroundTaskActive"] = true;
 
             _periodicTimer = ThreadPoolTimer.CreatePeriodicTimer(PeriodicTimerCallback, TimeSpan.FromSeconds(1));
+
+            _songTitleTimer =
+                ThreadPoolTimer.CreatePeriodicTimer(SongTitleTimerCallback, TimeSpan.FromMilliseconds(500));
 
             _listener = UserNotificationListener.Current;
 
@@ -364,6 +372,32 @@ namespace Tasks
                 // Write to LocalSettings to indicate that this background task ran.
                 //
                 LocalSettings.Values["TaskCancelationReason"] = _cancelReason.ToString();
+            }
+        }
+
+        private void SongTitleTimerCallback(ThreadPoolTimer timer)
+        {
+            if (!_cancelRequested)
+            {
+                var winamp = Winamp.GetSongTitle();
+
+                if (winamp != null)
+                {
+                    if (_songTitle == winamp) return;
+                    _songTitle = winamp;
+                    var elements = Regex.Split(_songTitle, @"\s-\s");
+
+                    SendMessages.Enqueue("1;30003;" + "Winamp" + ";" + elements[1] + ";" + elements[0]);
+                }
+                else
+                {
+                    _songTitle = null;
+                    SendMessages.Enqueue("0;30003");
+                }
+            }
+            else
+            {
+                _songTitleTimer.Cancel();
             }
         }
 

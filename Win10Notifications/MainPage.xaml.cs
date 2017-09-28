@@ -17,6 +17,7 @@ using Windows.UI.Notifications.Management;
 using Windows.UI.Popups;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Navigation;
 using Win10Notifications.Models;
 using Win32;
@@ -114,7 +115,6 @@ namespace Win10Notifications
                 SystemNavigationManager.GetForCurrentView().AppViewBackButtonVisibility =
                     AppViewBackButtonVisibility.Collapsed;
             }
-
         }
 
         private void InitializeSongTitleTimer()
@@ -127,71 +127,8 @@ namespace Win10Notifications
         private void SongTitleTimer_Tick(object sender, object e)
         {
             var winamp = Winamp.GetSongTitle();
-            var spotify = Spotify.GetSongTitle();
 
-            if (winamp != null && spotify != null)
-            {
-                var preferedMusicPlayer = (string) _localSettings.Values["preferedMusicPlayer"];
-                switch (preferedMusicPlayer)
-                {
-                    case null:
-                        if (WinampButton.IsChecked != null && (bool) WinampButton.IsChecked)
-                        {
-                            WinampButton.IsChecked = false;
-                            SpotifyButton.IsChecked = true;
-                        }
-                        else if (SpotifyButton.IsChecked != null && (bool) SpotifyButton.IsChecked)
-                        {
-                            WinampButton.IsChecked = true;
-                            SpotifyButton.IsChecked = false;
-                        }
-                        else
-                        {
-                            WinampButton.IsChecked = false;
-                            SpotifyButton.IsChecked = true;
-                        }
-                        break;
-                    case "Winamp":
-                        StatusBlock.Text = winamp;
-                        WinampButton.IsChecked = true;
-                        SpotifyButton.IsCompact = false;
-                        break;
-                    case "Spotify":
-                        StatusBlock.Text = spotify;
-                        WinampButton.IsChecked = false;
-                        SpotifyButton.IsChecked = true;
-                        break;
-                    default:
-                        StatusBlock.Text = string.Empty;
-                        break;
-                }
-                WinampButton.Visibility = Visibility.Visible;
-                SpotifyButton.Visibility = Visibility.Visible;
-            }
-            else if (spotify != null)
-            {
-                StatusBlock.Text = spotify;
-                WinampButton.IsChecked = false;
-                SpotifyButton.IsChecked = true;
-                WinampButton.Visibility = Visibility.Collapsed;
-                SpotifyButton.Visibility = Visibility.Visible;
-            }
-            else if (winamp != null)
-            {
-                StatusBlock.Text = winamp;
-                WinampButton.IsChecked = true;
-                SpotifyButton.IsChecked = false;
-                WinampButton.Visibility = Visibility.Visible;
-                SpotifyButton.Visibility = Visibility.Collapsed;
-            }
-            else
-            {
-                StatusBlock.Text = "No music";
-                WinampButton.IsChecked = false;
-                SpotifyButton.IsChecked = false;
-                WinampButton.Visibility = Visibility.Collapsed;
-                SpotifyButton.Visibility = Visibility.Collapsed;
-            }
+            SongTitle.Text = winamp ?? "Winamp is not opened!";
         }
 
         private void ListViewNotifications_ItemClick(object sender, ItemClickEventArgs e)
@@ -578,7 +515,7 @@ namespace Win10Notifications
         /// <param name="type"></param>
         public void NotifyUser(string strMessage, NotifyType type)
         {
-            /*switch (type)
+            switch (type)
             {
                 case NotifyType.StatusMessage:
                     StatusBorder.Background = new SolidColorBrush(Windows.UI.Colors.Green);
@@ -592,7 +529,7 @@ namespace Win10Notifications
             StatusBlock.Text = strMessage;
 
             // Collapse the StatusBlock if it has no text to conserve real estate.
-            StatusBorder.Visibility = StatusBlock.Text != string.Empty ? Visibility.Visible : Visibility.Collapsed;*/
+            StatusBorder.Visibility = StatusBlock.Text != string.Empty ? Visibility.Visible : Visibility.Collapsed;
         }
 
         public enum NotifyType
@@ -710,12 +647,6 @@ namespace Win10Notifications
         private void PreviousTrackButton_OnClick(object sender, RoutedEventArgs e)
         {
             Winamp.PreviousTrack();
-        }
-
-        private void MusicPlayerButton_OnChecked(object sender, RoutedEventArgs e)
-        {
-            var musicPlayerButton = (AppBarToggleButton) sender;
-            _localSettings.Values["preferedMusicPlayer"] = musicPlayerButton.Label;
         }
     }
 }

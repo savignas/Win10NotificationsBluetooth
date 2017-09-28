@@ -58,6 +58,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <StackPanel Margin="0,0,0,10">
                     <TextBlock TextWrapping="Wrap" HorizontalAlignment="Left">
@@ -79,14 +80,12 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
                 <ScrollViewer Grid.Row="2" VerticalScrollMode="Auto" VerticalScrollBarVisibility="Auto">
-                    <Grid Margin="0,0,0,0">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="*"/>
-                        </Grid.RowDefinitions>
-                        <ListBox x:Name="ConversationListBox"
-                                 Margin="0,0,0,0" ScrollViewer.HorizontalScrollMode="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto"/>
-                    </Grid>
+                    <ListBox x:Name="ConversationListBox"
+                             Margin="0,0,0,0" ScrollViewer.HorizontalScrollMode="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto"/>
                 </ScrollViewer>
+                <Border Grid.Row="3" x:Name="StatusBorder">
+                    <TextBlock x:Name="StatusBlock" Text="Status:" Margin="12,14"/>
+                </Border>
             </Grid>
             <CommandBar Grid.Row="1" Margin="10,0,10,0">
                 <AppBarButton x:Name="PreviousTrackButton" Icon="Previous" Label="Previous Track" Click="PreviousTrackButton_OnClick"/>
@@ -98,15 +97,11 @@
                 <AppBarButton x:Name="DisconnectButtonBg" Icon="Cancel" Label="Stop BG" Click="DisconnectButtonBg_Click"/>
 
                 <CommandBar.SecondaryCommands>
-                    <AppBarToggleButton Name="WinampButton" Label="Winamp" Visibility="Collapsed" Checked="MusicPlayerButton_OnChecked"/>
-                    <AppBarToggleButton Name="SpotifyButton" Label="Spotify" Visibility="Collapsed" Checked="MusicPlayerButton_OnChecked"/>
                     <AppBarButton Name="SettingsButton" Icon="Setting" Label="Settings" Click="SettingsButton_Click" />
                 </CommandBar.SecondaryCommands>
 
                 <CommandBar.Content>
-                    <Border x:Name="StatusBorder">
-                        <TextBlock x:Name="StatusBlock" Text="Status:" Margin="12,14"/>
-                    </Border>
+                    <TextBlock Name="SongTitle" Margin="12,14"/>
                 </CommandBar.Content>
             </CommandBar>
         </Grid>
