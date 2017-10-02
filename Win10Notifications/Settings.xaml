@@ -24,6 +24,7 @@
             <Grid Grid.Row="1" Margin="10">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
@@ -34,12 +35,14 @@
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Send Notifications" VerticalAlignment="Center" Margin="0,0,10,0"/>
                 <ToggleSwitch Name="SendNotifications" Grid.Row="0" Grid.Column="1" Toggled="SendNotifications_Toggled"/>
-                <ToggleButton x:Name="DeleteAllButton" Grid.Row="0" Grid.Column="2" Margin="0,0,20,0" Checked="DeleteAllButton_Checked">
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Winamp" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,10,0"/>
+                <ToggleSwitch Name="SendWinamp" Grid.Row="1" Grid.Column="1" Toggled="SendWinamp_OnToggled"/>
+                <ToggleButton x:Name="DeleteAllButton" Grid.Row="1" Grid.Column="2" Margin="0,0,20,0" Checked="DeleteAllButton_Checked">
                     <SymbolIcon Symbol="Delete"/>
                 </ToggleButton>
-                <TextBlock Grid.Row="1" Grid.Column="0" Text="Apps:" HorizontalAlignment="Right" Margin="0,0,10,0"/>
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Apps:" HorizontalAlignment="Right" Margin="0,0,10,0"/>
                 <ListView x:Name="ListViewNotificationApps"
-                          Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Grid.RowSpan="2"
+                          Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Grid.RowSpan="2"
                           SelectionMode="None">
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="models:NotificationApp">
@@ -67,7 +70,7 @@
                         </Style>
                     </ListView.ItemContainerStyle>
                 </ListView>
-                <Button x:Name="SaveButton" Grid.Row="2" Grid.Column="0" Visibility="Collapsed" Click="SaveButton_Click">Save changes</Button>
+                <Button x:Name="SaveButton" Grid.Row="3" Grid.Column="0" Visibility="Collapsed" Click="SaveButton_Click">Save changes</Button>
             </Grid>
         </Grid>
     </Grid>

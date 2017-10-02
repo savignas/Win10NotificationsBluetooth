@@ -101,7 +101,7 @@
                 </CommandBar.SecondaryCommands>
 
                 <CommandBar.Content>
-                    <TextBlock Name="SongTitle" Margin="12,14"/>
+                    <TextBlock Name="SongTitle" Margin="12,14" TextWrapping="WrapWholeWords"/>
                 </CommandBar.Content>
             </CommandBar>
         </Grid>

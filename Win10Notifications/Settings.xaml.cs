@@ -37,20 +37,21 @@ namespace Win10Notifications
         private List<NotificationApp> _notificationApps = new List<NotificationApp>();
 
         private bool _sendNotifications;
+        private bool _sendWinamp;
 
         private int _itemsLoaded;
 
         private bool _loaded;
 
         private const string NotificationListenerTaskName = "UserNotificationChanged";
-        private string notificationListenerTaskEntryPoint = "Tasks.NotificationListenerTask";
+        private const string NotificationListenerTaskEntryPoint = "Tasks.NotificationListenerTask";
         private IBackgroundTaskRegistration _notificationListenerTaskRegistration;
 
 
         public Settings()
         {
             InitializeComponent();
-            SetSendNotificationsToggle();
+            SetSendToggles();
             ReadNotificationApps();
 
             SystemNavigationManager.GetForCurrentView().BackRequested += Settings_BackRequested;
@@ -127,7 +128,7 @@ namespace Win10Notifications
                 // Applications registering for background trigger must request for permission.
                 var backgroundAccessStatus = await BackgroundExecutionManager.RequestAccessAsync();
 
-                var builder = new BackgroundTaskBuilder {TaskEntryPoint = notificationListenerTaskEntryPoint};
+                var builder = new BackgroundTaskBuilder {TaskEntryPoint = NotificationListenerTaskEntryPoint};
                 builder.SetTrigger(new UserNotificationChangedTrigger(NotificationKinds.Toast));
                 builder.Name = NotificationListenerTaskName;
 
@@ -171,12 +172,17 @@ namespace Win10Notifications
             }
         }
 
-        private void SetSendNotificationsToggle()
+        private void SetSendToggles()
         {
-            var enabled = _localSettings.Values["sendNotifications"];
-            if (enabled != null && (bool) enabled)
+            var sendNotifications  = _localSettings.Values["sendNotifications"];
+            var sendWinamp = _localSettings.Values["sendWinamp"];
+            if (sendNotifications != null && (bool) sendNotifications)
             {
-                SendNotifications.IsOn = (bool) enabled;
+                SendNotifications.IsOn = (bool) sendNotifications;
+            }
+            if (sendWinamp != null && (bool) sendWinamp)
+            {
+                SendWinamp.IsOn = (bool) sendWinamp;
             }
         }
 
@@ -283,7 +289,9 @@ namespace Win10Notifications
             }
 
             SendNotifications.IsOn = _sendNotifications;
+            SendWinamp.IsOn = _sendWinamp;
             _localSettings.Values["sendNotifications"] = _sendNotifications;
+            _localSettings.Values["sendWinamp"] = _sendWinamp;
 
             var data = new List<byte>();
             foreach (var notificationApp in _notificationApps)
@@ -318,6 +326,16 @@ namespace Win10Notifications
             if (_itemsLoaded != _notificationApps.Count) return;
             _loaded = true;
             _itemsLoaded = 0;
+        }
+
+        private void SendWinamp_OnToggled(object sender, RoutedEventArgs e)
+        {
+            _sendWinamp = SendWinamp.IsOn;
+
+            if (_loaded)
+            {
+                SaveButton.Visibility = Visibility.Visible;
+            }
         }
     }
 }

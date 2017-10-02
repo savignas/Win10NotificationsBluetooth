@@ -379,20 +379,28 @@ namespace Tasks
         {
             if (!_cancelRequested)
             {
+                if (LocalSettings.Values["sendWinamp"] == null || !(bool) LocalSettings.Values["sendWinamp"]) return;
                 var winamp = Winamp.GetSongTitle();
 
                 if (winamp != null)
                 {
                     if (_songTitle == winamp) return;
                     _songTitle = winamp;
-                    var elements = Regex.Split(_songTitle, @"\s-\s");
-
-                    SendMessages.Enqueue("1;30003;" + "Winamp" + ";" + elements[1] + ";" + elements[0]);
+                    if (_songTitle != "Paused" && _songTitle != "Stopped")
+                    {
+                        var elements = Regex.Split(_songTitle, @"\s-\s");
+                        SendMessages.Enqueue("1;30003;Winamp" + ";" + elements[1] + ";" + elements[0]);
+                    }
+                    else
+                    {
+                        SendMessages.Enqueue("1;30003;Winamp;Winamp;Not Playing");
+                    }
                 }
                 else
                 {
-                    _songTitle = null;
+                    if (_songTitle == null) return;
                     SendMessages.Enqueue("0;30003");
+                    _songTitle = null;
                 }
             }
             else
