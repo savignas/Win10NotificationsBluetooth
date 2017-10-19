@@ -16,6 +16,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Text.RegularExpressions;
+using System.Threading;
 using Windows.ApplicationModel;
 using Windows.Foundation;
 using Microsoft.Toolkit.Uwp.Notifications;
@@ -44,6 +45,8 @@ namespace Tasks
 
         private ThreadPoolTimer _periodicTimer;
         private ThreadPoolTimer _songTitleTimer;
+
+        private Timer _timer;
 
         private static readonly string PackageFamilyName = Package.Current.Id.FamilyName;
 
@@ -81,10 +84,12 @@ namespace Tasks
             // Store a setting so that the app knows that the task is running. 
             LocalSettings.Values["IsBackgroundTaskActive"] = true;
 
-            _periodicTimer = ThreadPoolTimer.CreatePeriodicTimer(PeriodicTimerCallback, TimeSpan.FromSeconds(1));
+            //_periodicTimer = ThreadPoolTimer.CreatePeriodicTimer(PeriodicTimerCallback, TimeSpan.FromSeconds(1));
 
             _songTitleTimer =
                 ThreadPoolTimer.CreatePeriodicTimer(SongTitleTimerCallback, TimeSpan.FromMilliseconds(500));
+
+            _timer = new Timer(TimerCallback, null, 1000, 1000);
 
             _listener = UserNotificationListener.Current;
 
@@ -133,6 +138,7 @@ namespace Tasks
             LocalSettings.Values["TaskCancelationReason"] = _cancelReason.ToString();
             LocalSettings.Values["IsBackgroundTaskActive"] = false;
             LocalSettings.Values["ReceivedMessage"] = "";
+            ToastNotificationManager.History.Clear();
             // Complete the background task (this raises the OnCompleted event on the corresponding BackgroundTaskRegistration). 
             _deferral.Complete();
         }
@@ -259,6 +265,7 @@ namespace Tasks
                     if (readLength < sizeof(byte))
                     {
                         LocalSettings.Values["IsBackgroundTaskActive"] = false;
+                        ToastNotificationManager.History.Clear();
                         // Complete the background task (this raises the OnCompleted event on the corresponding BackgroundTaskRegistration). 
                         _deferral.Complete();
                     }
@@ -268,6 +275,7 @@ namespace Tasks
                     if (readLength < currentLength)
                     {
                         LocalSettings.Values["IsBackgroundTaskActive"] = false;
+                        ToastNotificationManager.History.Clear();
                         // Complete the background task (this raises the OnCompleted event on the corresponding BackgroundTaskRegistration). 
                         _deferral.Complete();
                     }
@@ -324,6 +332,7 @@ namespace Tasks
             
         }
 
+        /*
         /// <summary>
         /// Periodically check if there's a new message and if there is, send it over the socket 
         /// </summary>
@@ -368,6 +377,52 @@ namespace Tasks
             {
                 // Timer clean up
                 _periodicTimer.Cancel();
+                //
+                // Write to LocalSettings to indicate that this background task ran.
+                //
+                LocalSettings.Values["TaskCancelationReason"] = _cancelReason.ToString();
+            }
+        }*/
+
+        private async void TimerCallback(object state)
+        {
+            if (!_cancelRequested)
+            {
+                string message;
+                try
+                {
+                    message = SendMessages.Dequeue();
+                }
+                catch (Exception)
+                {
+                    return;
+                }
+
+                try
+                {
+                    // Make sure that the connection is still up and there is a message to send
+                    if (_socket != null)
+                    {
+                        if (message == null) return;
+                        _writer.WriteString(message);
+                        await _writer.StoreAsync();
+                    }
+                    else
+                    {
+                        _cancelReason = BackgroundTaskCancellationReason.ConditionLoss;
+                        _deferral.Complete();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LocalSettings.Values["TaskCancelationReason"] = ex.Message;
+                    _deferral.Complete();
+                }
+            }
+            else
+            {
+                // Timer clean up
+                _timer.Dispose();
                 //
                 // Write to LocalSettings to indicate that this background task ran.
                 //
