@@ -66,6 +66,8 @@ namespace Tasks
 
         private static string _songTitle;
 
+        private static int _id;
+
         /// <inheritdoc />
         /// <summary>
         /// The entry point of a background task.
@@ -96,6 +98,8 @@ namespace Tasks
             _notificationAppsFile = await _localFolder.GetFileAsync("notificationApps");
 
             _oldData = await ReadNotificationApps();
+
+            _id = 0;
 
             try
             {
@@ -145,15 +149,16 @@ namespace Tasks
 
         public void ShowNotification(string appName, string packageName, string title, string content, string key)
         {
-            var index = AndroidNotifications.FindIndex(n => n.Key == key);
-            if (index != -1)
+            var androidNotification = AndroidNotifications.Find(n => n.Key == key);
+            if (androidNotification != null)
             {
-                AndroidNotifications[index].Content = content;
+                androidNotification.Content = content;
             }
             else
             {
-                var androidNotification = new AndroidNotification
+                androidNotification = new AndroidNotification
                 {
+                    Id = _id,
                     AppName = appName,
                     Content = content,
                     Key = key,
@@ -161,7 +166,7 @@ namespace Tasks
                     Title = title
                 };
                 AndroidNotifications.Add(androidNotification);
-                index = AndroidNotifications.IndexOf(androidNotification);
+                _id++;
             }
 
             var visual = new ToastVisual
@@ -245,7 +250,7 @@ namespace Tasks
 
             var toast = new ToastNotification(toastContent.GetXml())
             {
-                Tag = index.ToString()
+                Tag = androidNotification.Id.ToString()
             };
             ToastNotificationManager.CreateToastNotifier().Show(toast);
         }
@@ -292,11 +297,11 @@ namespace Tasks
                             }
                             catch (Exception)
                             {
-                                var index = AndroidNotifications.FindIndex(n => n.Key == messageParts[1]);
-                                if (index != -1)
+                                var androidNotification = AndroidNotifications.Find(n => n.Key == messageParts[1]);
+                                if (androidNotification != null)
                                 {
-                                    ToastNotificationManager.History.Remove(index.ToString());
-                                    AndroidNotifications.RemoveAt(index);
+                                    ToastNotificationManager.History.Remove(androidNotification.Id.ToString());
+                                    AndroidNotifications.Remove(androidNotification);
                                 }
                             }
                             break;
@@ -583,17 +588,19 @@ namespace Tasks
         public static void DismissAndroidNotification()
         {
             var androidNotificationHistory = ToastNotificationManager.History.GetHistory();
-            for (var i = 0; i < AndroidNotifications.Count; i++)
+            for (var i = 0; i < _id; i++)
             {
                 if (androidNotificationHistory.Any(n => n.Tag == i.ToString())) continue;
 
-                if ((bool)LocalSettings.Values["IsBackgroundTaskActive"])
+                var id = i;
+                var androidNotification = AndroidNotifications.Find(n => n.Id == id);
+
+                if ((bool)LocalSettings.Values["IsBackgroundTaskActive"] && androidNotification != null)
                 {
-                    SendMessages.Enqueue("0;" + AndroidNotifications[i].Key);
+                    SendMessages.Enqueue("0;" + androidNotification.Key);
                 }
 
-                AndroidNotifications.RemoveAt(i);
-                i--;
+                AndroidNotifications.Remove(androidNotification);
             }
         }
 
