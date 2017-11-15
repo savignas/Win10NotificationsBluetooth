@@ -91,7 +91,7 @@ namespace Tasks
             _songTitleTimer =
                 ThreadPoolTimer.CreatePeriodicTimer(SongTitleTimerCallback, TimeSpan.FromMilliseconds(500));
 
-            _timer = new Timer(TimerCallback, null, 1000, 1000);
+            _timer = new Timer(TimerCallback, null, 500, 500);
 
             _listener = UserNotificationListener.Current;
 
@@ -266,17 +266,17 @@ namespace Tasks
             {
                 while (true)
                 {
-                    var readLength = await _reader.LoadAsync(sizeof(byte));
-                    if (readLength < sizeof(byte))
+                    var readLength = await _reader.LoadAsync(sizeof(int));
+                    if (readLength < sizeof(int))
                     {
                         LocalSettings.Values["IsBackgroundTaskActive"] = false;
                         ToastNotificationManager.History.Clear();
                         // Complete the background task (this raises the OnCompleted event on the corresponding BackgroundTaskRegistration). 
                         _deferral.Complete();
                     }
-                    var currentLength = _reader.ReadByte();
+                    var currentLength = _reader.ReadInt32();
 
-                    readLength = await _reader.LoadAsync(currentLength);
+                    readLength = await _reader.LoadAsync((uint) currentLength);
                     if (readLength < currentLength)
                     {
                         LocalSettings.Values["IsBackgroundTaskActive"] = false;
@@ -284,7 +284,7 @@ namespace Tasks
                         // Complete the background task (this raises the OnCompleted event on the corresponding BackgroundTaskRegistration). 
                         _deferral.Complete();
                     }
-                    var message = _reader.ReadString(currentLength);
+                    var message = _reader.ReadString((uint) currentLength);
 
                     var messageParts = message.Split(';');
 
