@@ -14,10 +14,24 @@ namespace Tasks
         {
             if (!(taskInstance.TriggerDetails is ToastNotificationActionTriggerDetail details)) return;
             var arguments = details.Argument;
-            var userInput = details.UserInput.Values;
-            var text = (string) userInput.First();
-
-            RfcommServerTask.SendSms(arguments, text);
+            if (string.IsNullOrEmpty(arguments)) return;
+            if (arguments.StartsWith("+"))
+            {
+                var userInput = details.UserInput.Values;
+                if (userInput != null)
+                {
+                    var text = (string) userInput.First();
+                    RfcommServerTask.SendSms(arguments, text);
+                }
+                else
+                {
+                    RfcommServerTask.DismissCall(arguments);
+                }
+            }
+            else
+            {
+                RfcommServerTask.OpenApp(arguments);
+            }
         }
     }
 }

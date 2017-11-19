@@ -147,7 +147,7 @@ namespace Tasks
             _deferral.Complete();
         }
 
-        public void ShowNotification(string appName, string packageName, string title, string content, string key)
+        public static void ShowNotification(string appName, string packageName, string title, string content, string key, string intent)
         {
             var androidNotification = AndroidNotifications.Find(n => n.Key == key);
             if (androidNotification != null)
@@ -195,58 +195,36 @@ namespace Tasks
             var toastContent = new ToastContent
             {
                 Header = header,
-                Visual = visual
+                Visual = visual,
+                ActivationType = ToastActivationType.Background
             };
+            var toastActions = new ToastActionsCustom();
+            if (!string.IsNullOrEmpty(intent))
+            {
+                toastActions.Buttons.Add(new ToastButton("Open on Device", key)
+                {
+                    ActivationType = ToastActivationType.Background
+                });
+            }
             if (key.StartsWith("+"))
             {
-                if (key.EndsWith("sms"))
+                toastActions.Inputs.Add(new ToastTextBox("tbReply")
                 {
-                    toastContent.Actions = new ToastActionsCustom
-                    {
-                        Inputs =
-                        {
-                            new ToastTextBox("tbReply")
-                            {
-                                PlaceholderContent = "Type a reply..."
-                            }
-                        },
-                        Buttons =
-                        {
-                            new ToastButton("Reply", key)
-                            {
-                                ActivationType = ToastActivationType.Background,
-                                TextBoxId = "tbReply"
-                            }
-                        }
-                    };
-                }
-                else if (key.EndsWith("call"))
+                    PlaceholderContent = "Type a reply..."
+                });
+                toastActions.Buttons.Add(new ToastButton("Reply", key)
                 {
-                    toastContent.Actions = new ToastActionsCustom
-                    {
-                        Inputs =
-                        {
-                            new ToastTextBox("tbReply")
-                            {
-                                PlaceholderContent = "Type a reply..."
-                            }
-                        },
-                        Buttons =
-                        {
-                            new ToastButton("Reply", key)
-                            {
-                                ActivationType = ToastActivationType.Background,
-                                TextBoxId = "tbReply"
-                            },
-                            new ToastButtonDismiss("Dismiss Call")
-                        }
-                    };
-                }
+                    ActivationType = ToastActivationType.Background,
+                    TextBoxId = "tbReply"
+                });
+                    
                 if (key.EndsWith("call"))
                 {
+                    toastActions.Buttons.Add(new ToastButtonDismiss("Dismiss Call"));
                     toastContent.Scenario = ToastScenario.IncomingCall;
                 }
             }
+            toastContent.Actions = toastActions;
 
             var toast = new ToastNotification(toastContent.GetXml())
             {
@@ -258,6 +236,16 @@ namespace Tasks
         public static void SendSms(string phoneNumber, string text) 
         {
             SendMessages.Enqueue("0;" + phoneNumber + ";" + text);
+        }
+
+        public static void OpenApp(string key)
+        {
+            SendMessages.Enqueue("2;" + key);
+        }
+
+        public static void DismissCall(string key)
+        {
+            SendMessages.Enqueue("0;" + key);
         }
 
         private async Task ReceiveDataAsync()
@@ -310,17 +298,17 @@ namespace Tasks
                             {
                                 if (messageParts[1].EndsWith("sms"))
                                 {
-                                    ShowNotification("SMS", "sms", messageParts[2], messageParts[3], messageParts[1]);
+                                    ShowNotification("SMS", "sms", messageParts[2], messageParts[3], messageParts[1], null);
                                 }
                                 else if (messageParts[1].EndsWith("call"))
                                 {
-                                    ShowNotification("Incoming call", "call", messageParts[2], "Calling...", messageParts[1]);
+                                    ShowNotification("Incoming call", "call", messageParts[2], "Calling...", messageParts[1], null);
                                 }
                             }
                             else
                             {
                                 ShowNotification(messageParts[2], messageParts[3], messageParts[4], messageParts[5],
-                                    messageParts[1]);
+                                    messageParts[1], messageParts[6]);
                             }
                             break;
                     }
@@ -345,6 +333,7 @@ namespace Tasks
         
         private async void PeriodicTimerCallback(ThreadPoolTimer timer)
         {
+            if (!_cancelRequested)
             if (!_cancelRequested)
             {
                 string message;
