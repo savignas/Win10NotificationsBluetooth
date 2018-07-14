@@ -11,6 +11,7 @@ using Windows.Devices.Bluetooth.Rfcomm;
 using Windows.Devices.Radios;
 using Windows.Foundation;
 using Windows.Storage;
+using Windows.System;
 using Windows.UI.Core;
 using Windows.UI.Notifications;
 using Windows.UI.Notifications.Management;
@@ -162,7 +163,7 @@ namespace Win10Notifications
         private async void InitializeNotificationListener()
         {
             _sendNotifications = _localSettings.Values["sendNotifications"];
-            if (_sendNotifications == null || !(bool) _localSettings.Values["sendNotifications"]) return;
+            if (_sendNotifications != null && !(bool) _sendNotifications) return;
 
             // Get the listener
             _listener = UserNotificationListener.Current;
@@ -176,6 +177,7 @@ namespace Win10Notifications
                 case UserNotificationListenerAccessStatus.Allowed:
 
                     // Yay! Proceed as normal
+                    _localSettings.Values["sendNotifications"] = true;
                     break;
 
                 // This means the user has denied access.
@@ -187,10 +189,17 @@ namespace Win10Notifications
                     _localSettings.Values["sendNotifications"] = false;
                     // Show UI explaining that listener features will not
                     // work until user allows access.
-                    var dialog = new MessageDialog("You need to turn on access to notifications in privacy settings!", "Error");
-                    dialog.Commands.Add(new UICommand { Label = "Close", Id = 0 });
-                    dialog.CancelCommandIndex = 0;
-                    await dialog.ShowAsync();
+                    var dialog = new MessageDialog("You need to turn on access to notifications in privacy settings!\n" +
+                                                   "Note: When changing settings, application could close. If it does, please open it again", "Error");
+                    dialog.Commands.Add(new UICommand { Label = "Settings", Id = 0 });
+                    dialog.Commands.Add(new UICommand { Label = "Close", Id = 1 });
+                    dialog.CancelCommandIndex = 1;
+                    dialog.DefaultCommandIndex = 1;
+                    var command = await dialog.ShowAsync();
+                    if ((int)command.Id == 0)
+                    {
+                        await Launcher.LaunchUriAsync(new Uri("ms-settings:privacy-notifications"));
+                    }
                     break;
 
                 // This means the user closed the prompt without
@@ -205,12 +214,12 @@ namespace Win10Notifications
             }
 
             // If background task isn't registered yet
-            if (!BackgroundTaskRegistration.AllTasks.Any(i => i.Value.Name.Equals("UserNotificationChanged2")))
+            if (!BackgroundTaskRegistration.AllTasks.Any(i => i.Value.Name.Equals("UserNotificationChanged")))
             {
                 // Specify the background task
                 var builder = new BackgroundTaskBuilder()
                 {
-                    Name = "UserNotificationChanged2"
+                    Name = "UserNotificationChanged"
                 };
 
                 // Set the trigger for Listener, listening to Toast Notifications
@@ -647,6 +656,11 @@ namespace Win10Notifications
         private void PreviousTrackButton_OnClick(object sender, RoutedEventArgs e)
         {
             Winamp.PreviousTrack();
+        }
+
+        private void MuteButton_OnClick(object sender, RoutedEventArgs e)
+        {
+            Spotify.Mute();
         }
     }
 }

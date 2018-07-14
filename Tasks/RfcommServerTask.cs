@@ -43,7 +43,7 @@ namespace Tasks
         private BackgroundTaskCancellationReason _cancelReason = BackgroundTaskCancellationReason.Abort;
         private bool _cancelRequested;
 
-        private ThreadPoolTimer _periodicTimer;
+        //private ThreadPoolTimer _periodicTimer;
         private ThreadPoolTimer _songTitleTimer;
 
         private Timer _timer;
@@ -96,6 +96,7 @@ namespace Tasks
             _listener = UserNotificationListener.Current;
 
             _notificationAppsFile = await _localFolder.GetFileAsync("notificationApps");
+            await Logger.Logger.CreateLogFile();
 
             _oldData = await ReadNotificationApps();
 
@@ -112,6 +113,8 @@ namespace Tasks
 
                     _writer = new DataWriter(_socket.OutputStream);
                     _reader = new DataReader(_socket.InputStream);
+
+                    Logger.Logger.Info("Connected to " + _remoteDevice.Name + "(" + _remoteDevice.BluetoothAddress + ")");
 					
 					await UpdateNotifications();
                 }
@@ -120,6 +123,8 @@ namespace Tasks
                     LocalSettings.Values["BackgroundTaskStatus"] = "Trigger details returned null";
                     _deferral.Complete();
                 }
+
+                Logger.Logger.Info("Rfcomm Server Task instance");
 
                 await ReceiveDataAsync();
             }
@@ -145,6 +150,7 @@ namespace Tasks
             ToastNotificationManager.History.Clear();
             // Complete the background task (this raises the OnCompleted event on the corresponding BackgroundTaskRegistration). 
             _deferral.Complete();
+            Logger.Logger.Info("Rfcomm Server OnCanceled Event: " + _cancelReason);
         }
 
         public static void ShowNotification(string appName, string packageName, string title, string content, string key, string intent)
@@ -231,21 +237,25 @@ namespace Tasks
                 Tag = androidNotification.Id.ToString()
             };
             ToastNotificationManager.CreateToastNotifier().Show(toast);
+            Logger.Logger.Info("Showing Android notification...");
         }
 
-        public static void SendSms(string phoneNumber, string text) 
+        public static void SendSms(string phoneNumber, string text)
         {
-            SendMessages.Enqueue("0;" + phoneNumber + ";" + text);
+            SendMessage(phoneNumber, text);
+            Logger.Logger.Info("Sending SMS...");
         }
 
         public static void OpenApp(string key)
         {
-            SendMessages.Enqueue("2;" + key);
+            SendMessage(Type.Open, key);
+            Logger.Logger.Info("Opening App (KEY=" + key + ") on Phone...");
         }
 
         public static void DismissCall(string key)
         {
-            SendMessages.Enqueue("0;" + key);
+            SendMessage(Type.Remove, key);
+            Logger.Logger.Info("Dismissing call...");
         }
 
         private async Task ReceiveDataAsync()
@@ -272,20 +282,45 @@ namespace Tasks
                         // Complete the background task (this raises the OnCompleted event on the corresponding BackgroundTaskRegistration). 
                         _deferral.Complete();
                     }
-                    var message = _reader.ReadString((uint) currentLength);
+                    var readMessage = _reader.ReadString((uint) currentLength);
 
-                    var messageParts = message.Split(';');
-
-                    switch (messageParts[0])
+                    var messageParts = readMessage.Split(';');
+                    var notificationText = "";
+                    for (var i = 7; i < messageParts.Length; i++)
                     {
-                        case "0":
+                        notificationText += messageParts[i];
+                        if (i + 1 < messageParts.Length)
+                        {
+                            notificationText += ';';
+                        }
+                    }
+
+                    var textParts = new string[7];
+                    var location = 0;
+                    for (var i = 0; i < textParts.Length; i++)
+                    {
+                        textParts[i] = notificationText.Substring(location, int.Parse(messageParts[i]));
+                        location += int.Parse(messageParts[i]);
+                    }
+
+                    var action = (Type) int.Parse(textParts[0]);
+                    var key = textParts[1];
+                    var title = textParts[2];
+                    var text = textParts[3];
+                    var appName = textParts[4];
+                    var packageName = textParts[5];
+                    var contentIntent = textParts[6];
+
+                    switch (action)
+                    {
+                        case Type.Remove:
                             try
                             {
-                                await RemoveNotification(uint.Parse(messageParts[1]));
+                                await RemoveNotification(uint.Parse(key));
                             }
                             catch (Exception)
                             {
-                                var androidNotification = AndroidNotifications.Find(n => n.Key == messageParts[1]);
+                                var androidNotification = AndroidNotifications.Find(n => n.Key == key);
                                 if (androidNotification != null)
                                 {
                                     ToastNotificationManager.History.Remove(androidNotification.Id.ToString());
@@ -293,36 +328,37 @@ namespace Tasks
                                 }
                             }
                             break;
-                        case "1":
-                            if (messageParts[1].StartsWith("+"))
+                        case Type.Add:
+                            if (key.StartsWith("+"))
                             {
-                                if (messageParts[1].EndsWith("sms"))
+                                if (key.EndsWith("sms"))
                                 {
-                                    ShowNotification("SMS", "sms", messageParts[2], messageParts[3], messageParts[1], null);
+                                    ShowNotification("SMS", "sms", title, text, key, null);
                                 }
-                                else if (messageParts[1].EndsWith("call"))
+                                else if (key.EndsWith("call"))
                                 {
-                                    ShowNotification("Incoming call", "call", messageParts[2], "Calling...", messageParts[1], null);
+                                    ShowNotification("Incoming call", "call", title, "Calling...", key, null);
                                 }
                             }
                             else
                             {
-                                ShowNotification(messageParts[2], messageParts[3], messageParts[4], messageParts[5],
-                                    messageParts[1], messageParts[6]);
+                                ShowNotification(appName, packageName, title, text, key, contentIntent);
                             }
                             break;
                     }
 
-                    LocalSettings.Values["ReceivedMessage"] = message;
+                    LocalSettings.Values["ReceivedMessage"] = readMessage;
                     _taskInstance.Progress += 1;
+                    Logger.Logger.Info("Received message: " + readMessage);
                 }
             }
             catch (Exception ex)
             {
                 LocalSettings.Values["TaskCancelationReason"] = ex.Message;
                 _deferral.Complete();
+                Logger.Logger.Error(ex.Message, ex);
             }
-            
+
         }
 
         /*
@@ -400,17 +436,20 @@ namespace Tasks
                         if (message == null) return;
                         _writer.WriteString(message);
                         await _writer.StoreAsync();
+                        Logger.Logger.Info("Message Sent");
                     }
                     else
                     {
                         _cancelReason = BackgroundTaskCancellationReason.ConditionLoss;
                         _deferral.Complete();
+                        Logger.Logger.Info("Message was not sent. Socket is down!");
                     }
                 }
                 catch (Exception ex)
                 {
                     LocalSettings.Values["TaskCancelationReason"] = ex.Message;
                     _deferral.Complete();
+                    Logger.Logger.Error(ex.Message, ex);
                 }
             }
             else
@@ -421,6 +460,7 @@ namespace Tasks
                 // Write to LocalSettings to indicate that this background task ran.
                 //
                 LocalSettings.Values["TaskCancelationReason"] = _cancelReason.ToString();
+                Logger.Logger.Info("TimerCallback" + _cancelReason.ToString());
             }
         }
 
@@ -438,17 +478,17 @@ namespace Tasks
                     if (_songTitle != "Paused" && _songTitle != "Stopped")
                     {
                         var elements = Regex.Split(_songTitle, @"\s-\s");
-                        SendMessages.Enqueue("1;30003;Winamp" + ";" + elements[1] + ";" + elements[0]);
+                        //SendMessages.Enqueue("1;30003;Winamp" + ";" + elements[1] + ";" + elements[0]);
                     }
                     else
                     {
-                        SendMessages.Enqueue("1;30003;Winamp;Winamp;Not Playing");
+                        //SendMessages.Enqueue("1;30003;Winamp;Winamp;Not Playing");
                     }
                 }
                 else
                 {
                     if (_songTitle == null) return;
-                    SendMessages.Enqueue("0;30003");
+                    //SendMessages.Enqueue("0;30003");
                     _songTitle = null;
                 }
             }
@@ -483,7 +523,7 @@ namespace Tasks
                         if ((bool)LocalSettings.Values["IsBackgroundTaskActive"] &&
                             existingNotif.AppInfo.PackageFamilyName != PackageFamilyName)
                         {
-                            SendMessageBg("0", existingNotif);
+                            SendNotification(Type.Remove, existingNotif);
                         }
                     }
 
@@ -507,7 +547,7 @@ namespace Tasks
                             if ((bool)LocalSettings.Values["IsBackgroundTaskActive"] &&
                                 platNotif.AppInfo.PackageFamilyName != PackageFamilyName)
                             {
-                                SendMessageBg("2", platNotif);
+                                SendNotification(Type.Add, platNotif);
                             }
 
                             // Otherwise, leave it in its place
@@ -562,7 +602,7 @@ namespace Tasks
                                 platNotif.AppInfo.PackageFamilyName != PackageFamilyName &&
                                 _notificationApps.Any(x => x.Key == platNotif.AppInfo.AppUserModelId && x.Allowed))
                             {
-                                SendMessageBg("1", platNotif);
+                                SendNotification(Type.Add, platNotif);
                             }
                         }
                     }
@@ -586,7 +626,7 @@ namespace Tasks
 
                 if ((bool)LocalSettings.Values["IsBackgroundTaskActive"] && androidNotification != null)
                 {
-                    SendMessages.Enqueue("0;" + androidNotification.Key);
+                    SendMessage(Type.Remove, androidNotification.Key);
                 }
 
                 AndroidNotifications.Remove(androidNotification);
@@ -674,14 +714,13 @@ namespace Tasks
             await UpdateNotifications();
         }
 
-        private static void SendMessageBg(string type, UserNotification notification)
+        private static void SendNotification(Type type, UserNotification notification)
         {
             // Get the toast binding, if present
             var toastBinding = notification.Notification.Visual.GetBinding(KnownNotificationBindings.ToastGeneric);
             var id = notification.Id;
-            string notifMessage;
 
-            if (type == "1")
+            if (type == Type.Add)
             {
                 var appName = "";
                 var titleText = "No title";
@@ -702,21 +741,44 @@ namespace Tasks
                     var textElements = toastBinding.GetTextElements();
 
                     // Treat the first text element as the title text
-                    titleText = textElements.FirstOrDefault()?.Text;
+                    titleText = textElements.FirstOrDefault()?.Text ?? "";
 
                     // We'll treat all subsequent text elements as body text,
                     // joining them together via newlines.
                     bodyText = string.Join("\n", textElements.Skip(1).Select(t => t.Text));
                 }
 
-                notifMessage = type + ";" + id + ";" + appName + ";" + titleText + ";" + bodyText;
+                SendMessage(id.ToString(), titleText, bodyText, appName);
             }
             else
             {
-                notifMessage = type + ";" + id;
+                SendMessage(Type.Remove, id.ToString());
             }
-
-            SendMessages.Enqueue(notifMessage);
+            
         }
-    }   
+
+        private static void SendMessage(string id, string titleText, string bodyText, string appName)
+        {
+            var message = GenerateMessage(Type.Add, id, titleText, bodyText, appName);
+            SendMessages.Enqueue(message);
+        }
+
+        private static void SendMessage(Type type, string id)
+        {
+            var message = GenerateMessage(type, id, "", "", "");
+            SendMessages.Enqueue(message);
+        }
+
+        private static void SendMessage(string phoneNumber, string text)
+        {
+            var message = GenerateMessage(Type.Remove, phoneNumber, text, "", "");
+            SendMessages.Enqueue(message);
+        }
+
+        private static string GenerateMessage(Type type, string id, string titleText, string bodyText, string appName)
+        {
+            return ((int)type).ToString().Length + ";" + id.Length + ";" + titleText.Length + ";" + bodyText.Length + ";" + appName.Length + ";" +
+                   (int)type + id + titleText + bodyText + appName;
+        }
+    }
 }

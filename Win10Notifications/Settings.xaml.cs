@@ -4,6 +4,7 @@ using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
 using Windows.ApplicationModel.Background;
 using Windows.Storage;
+using Windows.System;
 using Windows.UI;
 using Windows.UI.Core;
 using Windows.UI.Notifications;
@@ -98,10 +99,17 @@ namespace Win10Notifications
                     _sendNotifications = false;
                     // Show UI explaining that listener features will not
                     // work until user allows access.
-                    var dialog = new MessageDialog("You need to turn on access to notifications in privacy settings!", "Error");
-                    dialog.Commands.Add(new UICommand { Label = "Close", Id = 0 });
-                    dialog.CancelCommandIndex = 0;
-                    await dialog.ShowAsync();
+                    var dialog = new MessageDialog("You need to turn on access to notifications in privacy settings!\n" +
+                                                   "Note: When changing settings, application could close. If it does, please open it again", "Error");
+                    dialog.Commands.Add(new UICommand { Label = "Settings", Id = 0 });
+                    dialog.Commands.Add(new UICommand { Label = "Close", Id = 1 });
+                    dialog.CancelCommandIndex = 1;
+                    dialog.DefaultCommandIndex = 1;
+                    var command = await dialog.ShowAsync();
+                    if ((int) command.Id == 0)
+                    {
+                        await Launcher.LaunchUriAsync(new Uri("ms-settings:privacy-notifications"));
+                    }
                     break;
 
                 // This means the user closed the prompt without
@@ -241,7 +249,7 @@ namespace Win10Notifications
             }
         }
 
-        private void DeleteButton_Checked(object sender, RoutedEventArgs e)
+        private void DeleteButton_Click(object sender, RoutedEventArgs e)
         {
             var frameworkElement = sender as FrameworkElement;
             var button = sender as ToggleButton;
@@ -257,7 +265,7 @@ namespace Win10Notifications
             SaveButton.Visibility = Visibility.Visible;
         }
 
-        private void DeleteAllButton_Checked(object sender, RoutedEventArgs e)
+        private void DeleteAllButton_Click(object sender, RoutedEventArgs e)
         {
             var button = sender as ToggleButton;
             if (button?.IsChecked != null && (bool) button.IsChecked)

@@ -114,16 +114,21 @@
     <Compile Include="RfcommServerTask.cs" />
     <Compile Include="ToastNotificationActionTriggerTask.cs" />
     <Compile Include="ToastNotificationHistoryChangedTriggerTask.cs" />
+    <Compile Include="Type.cs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NETCore.UniversalWindowsPlatform">
-      <Version>5.4.0</Version>
+      <Version>6.1.5</Version>
     </PackageReference>
     <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications">
-      <Version>2.0.0</Version>
+      <Version>3.0.0</Version>
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Logger\Logger.csproj">
+      <Project>{6500dc6c-cd77-4182-a2c5-50de01b4ecf5}</Project>
+      <Name>Logger</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Win32\Win32.csproj">
       <Project>{2b1b0bde-0e58-4c50-ae25-d7e9517b26d1}</Project>
       <Name>Win32</Name>

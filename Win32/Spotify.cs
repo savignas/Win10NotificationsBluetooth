@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 
 namespace Win32
 {
-    public sealed class Winamp
+    public sealed class Spotify
     {
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         private static extern IntPtr FindWindowW(string lpClassName,
@@ -17,15 +17,16 @@ namespace Win32
         private static extern IntPtr SendMessageW(IntPtr hwnd,
             int msg, IntPtr wParam, IntPtr lParam);
 
-        private const string LpClassName = "Winamp v1.x";
-        private const string StrTtlEnd = " - Winamp";
+        private const string LpClassName = "Chrome_WidgetWin_0";
 
-        private const int WmCommand = 0x111;
-        private const int WaPrevtrack = 40044;
-        private const int WaPlay = 40045;
-        private const int WaPause = 40046;
-        private const int WaStop = 40047;
-        private const int WaNexttrack = 40048;
+        private const int APPCOMMAND_VOLUME_MUTE = 524288;
+        private const int APPCOMMAND_VOLUME_DOWN = 589824;
+        private const int APPCOMMAND_VOLUME_UP = 655360;
+        private const int APPCOMMAND_MEDIA_PLAY_PAUSE = 917504;
+        private const int APPCOMMAND_MEDIA_PAUSE = 290816;
+        private const int APPCOMMAND_MEDIA_NEXTTRACK = 720896;
+        private const int APPCOMMAND_MEDIA_PREVIOUSTRACK = 786432;
+        private const int WM_APPCOMMAND = 0x319;
 
         public static string GetSongTitle()
         {
@@ -40,26 +41,8 @@ namespace Win32
                 return "unknown";
 
             var strTitle = lpText.Substring(0, intLength);
-            var intName = strTitle.IndexOf(StrTtlEnd, StringComparison.Ordinal);
-            var intLeft = strTitle.IndexOf("[", StringComparison.Ordinal);
-            var intRight = strTitle.IndexOf("]", StringComparison.Ordinal);
 
-            if (intName >= 0 && intLeft >= 0 && intName < intLeft &&
-                intRight >= 0 && intLeft + 1 < intRight)
-                strTitle = strTitle.Substring(intLeft + 1, intRight - intLeft - 1);
-
-            else if (strTitle.EndsWith(StrTtlEnd) &&
-                     strTitle.Length > StrTtlEnd.Length)
-            {
-                strTitle = strTitle.Substring(0,
-                    strTitle.Length - StrTtlEnd.Length);
-
-                var intDot = strTitle.IndexOf(".", StringComparison.Ordinal);
-                if (intDot > 0 && IsNumeric(strTitle.Substring(0, intDot)))
-                    strTitle = strTitle.Remove(0, intDot + 1);
-            }
-
-            else
+            if (strTitle == "Spotify")
             {
                 strTitle = "Not Playing";
             }
@@ -79,35 +62,40 @@ namespace Win32
             }
         }
 
-        private static void Command(int msg)
+        private static void Command(int cmd)
         {
             var hwnd = FindWindowW(LpClassName, null);
-            SendMessageW(hwnd, WmCommand, (IntPtr)msg, (IntPtr)0);
+            SendMessageW(hwnd, WM_APPCOMMAND, (IntPtr)0, (IntPtr)cmd);
         }
 
         public static void NextTrack()
         {
-            Command(WaNexttrack);
+            Command(APPCOMMAND_MEDIA_NEXTTRACK);
         }
 
         public static void Stop()
         {
-            Command(WaStop);
+            Command(APPCOMMAND_MEDIA_PAUSE);
         }
 
         public static void Pause()
         {
-            Command(WaPause);
+            Command(APPCOMMAND_MEDIA_PAUSE);
         }
 
         public static void Play()
         {
-            Command(WaPlay);
+            Command(APPCOMMAND_MEDIA_PLAY_PAUSE);
         }
 
         public static void PreviousTrack()
         {
-            Command(WaPrevtrack);
+            Command(APPCOMMAND_MEDIA_PREVIOUSTRACK);
+        }
+
+        public static void Mute()
+        {
+            Command(APPCOMMAND_VOLUME_MUTE);
         }
     }
 }

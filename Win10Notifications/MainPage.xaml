@@ -93,6 +93,7 @@
                 <AppBarButton x:Name="PauseButton" Icon="Pause" Label="Pause" Click="PauseButton_OnClick"/>
                 <AppBarButton x:Name="StopButton" Icon="Stop" Label="Stop" Click="StopButton_OnClick"/>
                 <AppBarButton x:Name="NextTrackButton" Icon="Next" Label="Next Track" Click="NextTrackButton_OnClick"/>
+                <AppBarButton x:Name="MuteButton" Icon="Mute" Label="Mute" Click="MuteButton_OnClick"></AppBarButton>
                 <AppBarSeparator/>
                 <AppBarButton x:Name="DisconnectButtonBg" Icon="Cancel" Label="Stop BG" Click="DisconnectButtonBg_Click"/>
 

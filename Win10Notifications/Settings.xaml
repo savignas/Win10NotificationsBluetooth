@@ -37,7 +37,7 @@
                 <ToggleSwitch Name="SendNotifications" Grid.Row="0" Grid.Column="1" Toggled="SendNotifications_Toggled"/>
                 <TextBlock Grid.Row="1" Grid.Column="0" Text="Winamp" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,10,0"/>
                 <ToggleSwitch Name="SendWinamp" Grid.Row="1" Grid.Column="1" Toggled="SendWinamp_OnToggled"/>
-                <ToggleButton x:Name="DeleteAllButton" Grid.Row="1" Grid.Column="2" Margin="0,0,20,0" Checked="DeleteAllButton_Checked">
+                <ToggleButton x:Name="DeleteAllButton" Grid.Row="1" Grid.Column="2" Margin="0,0,20,0" Click="DeleteAllButton_Click">
                     <SymbolIcon Symbol="Delete"/>
                 </ToggleButton>
                 <TextBlock Grid.Row="2" Grid.Column="0" Text="Apps:" HorizontalAlignment="Right" Margin="0,0,10,0"/>
@@ -58,7 +58,7 @@
                                 </Border>
                                 <TextBlock Grid.Column="1" Text="{x:Bind Name}" VerticalAlignment="Center"/>
                                 <ToggleSwitch Grid.Column="2" IsOn="{x:Bind Value, Mode=TwoWay}" HorizontalAlignment="Right" Toggled="ToggleSwitch_Toggled"/>
-                                <ToggleButton x:Name="DeleteButton" Grid.Column="3" IsChecked="{x:Bind Delete, Mode=TwoWay}" Checked="DeleteButton_Checked" >
+                                <ToggleButton x:Name="DeleteButton" Grid.Column="3" IsChecked="{x:Bind Delete, Mode=TwoWay}" Click="DeleteButton_Click" >
                                     <SymbolIcon Symbol="Delete"/>
                                 </ToggleButton>
                             </Grid>
