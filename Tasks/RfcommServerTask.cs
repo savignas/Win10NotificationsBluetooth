@@ -19,6 +19,8 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using Windows.ApplicationModel;
 using Windows.Foundation;
+using Windows.Graphics.Imaging;
+using Windows.UI.Xaml.Media.Imaging;
 using Microsoft.Toolkit.Uwp.Notifications;
 using Tasks.Models;
 using Win32;
@@ -714,7 +716,7 @@ namespace Tasks
             await UpdateNotifications();
         }
 
-        private static void SendNotification(Type type, UserNotification notification)
+        private static async void SendNotification(Type type, UserNotification notification)
         {
             // Get the toast binding, if present
             var toastBinding = notification.Notification.Visual.GetBinding(KnownNotificationBindings.ToastGeneric);
@@ -725,12 +727,41 @@ namespace Tasks
                 var appName = "";
                 var titleText = "No title";
                 var bodyText = "";
+                var mostCommonHex = "";
 
                 if (toastBinding != null)
                 {
                     try
                     {
                         appName = notification.AppInfo.DisplayInfo.DisplayName;
+                        var appLogoStream = await notification.AppInfo.DisplayInfo.GetLogo(new Size(16, 16)).OpenReadAsync();
+
+                        var decoder = await BitmapDecoder.CreateAsync(appLogoStream);
+                        var pixelData = await decoder.GetPixelDataAsync();
+                        var bytes = pixelData.DetachPixelData();
+                        var counts = new Dictionary<string, int>();
+                        for (var i = 0; i < bytes.Length; i += 4)
+                        {
+                            var blue = bytes[i];
+                            var green = bytes[i + 1];
+                            var red = bytes[i + 2];
+                            var alpha = bytes[i + 3];
+                            if (alpha == 0 || red == 0 && green == 0 && blue == 0 ||
+                                red == 255 && green == 255 && blue == 255) continue;
+                            var hex = alpha.ToString("X2") + red.ToString("X2") + green.ToString("X2") +
+                                      blue.ToString("X2");
+                            counts.TryGetValue(hex, out var count);
+                            count++;
+                            counts[hex] = count;
+                        }
+
+                        var occurrences = 0;
+                        foreach (var pair in counts)
+                        {
+                            if (pair.Value <= occurrences) continue;
+                            occurrences = pair.Value;
+                            mostCommonHex = pair.Key;
+                        }
                     }
                     catch (Exception)
                     {
@@ -748,7 +779,7 @@ namespace Tasks
                     bodyText = string.Join("\n", textElements.Skip(1).Select(t => t.Text));
                 }
 
-                SendMessage(id.ToString(), titleText, bodyText, appName);
+                SendMessage(id.ToString(), titleText, bodyText, appName, mostCommonHex);
             }
             else
             {
@@ -757,28 +788,29 @@ namespace Tasks
             
         }
 
-        private static void SendMessage(string id, string titleText, string bodyText, string appName)
+        private static void SendMessage(string id, string titleText, string bodyText, string appName, string hex)
         {
-            var message = GenerateMessage(Type.Add, id, titleText, bodyText, appName);
+            var message = GenerateMessage(Type.Add, id, titleText, bodyText, appName, hex);
             SendMessages.Enqueue(message);
         }
 
         private static void SendMessage(Type type, string id)
         {
-            var message = GenerateMessage(type, id, "", "", "");
+            var message = GenerateMessage(type, id, "", "", "", "");
             SendMessages.Enqueue(message);
         }
 
         private static void SendMessage(string phoneNumber, string text)
         {
-            var message = GenerateMessage(Type.Remove, phoneNumber, text, "", "");
+            var message = GenerateMessage(Type.Remove, phoneNumber, text, "", "", "");
             SendMessages.Enqueue(message);
         }
 
-        private static string GenerateMessage(Type type, string id, string titleText, string bodyText, string appName)
+        private static string GenerateMessage(Type type, string id, string titleText, string bodyText, string appName, string hex)
         {
-            return ((int)type).ToString().Length + ";" + id.Length + ";" + titleText.Length + ";" + bodyText.Length + ";" + appName.Length + ";" +
-                   (int)type + id + titleText + bodyText + appName;
+            return ((int) type).ToString().Length + ";" + id.Length + ";" + titleText.Length + ";" + bodyText.Length +
+                   ";" + appName.Length + ";" + hex.Length + ";" +
+                   (int) type + id + titleText + bodyText + appName + hex;
         }
     }
 }
